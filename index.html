@@ -602,8 +602,8 @@ input[readonly]{cursor:default;}
       <!-- Result -->
       <label style="margin-top:14px;">Result</label>
       <div class="outcome-grid" id="pen-result-grid">
-        <button class="obtn" onclick="selectPenResult('goal')">⚽ Goal</button>
-        <button class="obtn" onclick="selectPenResult('missed')">❌ Missed</button>
+        <button class="obtn" onclick="selectPenResult('goal',this)">⚽ Goal</button>
+        <button class="obtn" onclick="selectPenResult('missed',this)">❌ Missed</button>
       </div>
 
       <!-- If missed -->
@@ -764,6 +764,24 @@ let _profileSort='squad';
 const getSaved = () => _cachedMatches;
 const getProf = () => _cachedProfiles;
 const fname = p => (p.firstName+' '+p.lastName).trim();
+
+// ═══ PLAYER STAT TRACKER ═══
+function updStat(name,type,outcome){
+  const p=G.players.find(x=>fname(x)===name); if(!p) return;
+  const s=p.stats; const inc=k=>s[k]=(s[k]||0)+1;
+  if(type==='goal')inc('goals'); else if(type==='assist')inc('assists');
+  else if(type==='save')inc('saves'); else if(type==='conceded')inc('conceded');
+  else if(type==='shot-on')inc('shotsOn'); else if(type==='shot-off')inc('shotsOff');
+  else if(type==='shot-blk')inc('shotsBlk');
+  else if(type==='tackle'){inc('tackles');if(outcome==='Successful')inc('tacklesW');}
+  else if(type==='clearance'){inc('clearances');if(outcome==='Successful')inc('clearancesG');}
+  else if(type==='corner')inc('corners');
+  else if(type==='yellow')inc('yellows'); else if(type==='red')inc('reds');
+  else if(type==='penWon')inc('pensWon');
+  else if(type==='penGoal')inc('penGoals');
+  else if(type==='penMiss')inc('penMisses');
+  else if(type==='penConceded')inc('pensConceded');
+}
 
 // ═══ CALLED WHEN USER SIGNS IN ═══
 window.onUserSignedIn = function(){
@@ -1063,8 +1081,6 @@ function submitEvent(){
   if(curType==='goal'&&assist) updStat(assist,'assist','');
   updScoreDisp(); renderELog(); updLiveStrip(); checkHandicap(); closeM('mo-event');
 }
-
-// updStat defined in penalty section
 
 // ═══ HANDICAP ═══
 function checkHandicap(){
@@ -1807,35 +1823,35 @@ function selectPenTeam(team){
     document.getElementById('pen-player').innerHTML=opts;
     document.getElementById('pen-miss-label').textContent='How was it missed?';
     document.getElementById('pen-miss-grid').innerHTML=`
-      <button class="obtn" onclick="selectPenMiss('saved')">🧤 Saved</button>
-      <button class="obtn" onclick="selectPenMiss('offtarget')">↗️ Missed Target</button>`;
+      <button class="obtn" onclick="selectPenMiss('saved',this)">🧤 Saved</button>
+      <button class="obtn" onclick="selectPenMiss('offtarget',this)">↗️ Missed Target</button>`;
   } else {
     document.getElementById('pen-player-label').textContent='Thackley player who conceded the penalty';
     const opts='<option value="">Select player...</option>'+G.players.filter(p=>p.onPitch).map(p=>`<option value="${fname(p)}">#${p.number} ${fname(p)}</option>`).join('');
     document.getElementById('pen-player').innerHTML=opts;
     document.getElementById('pen-miss-label').textContent='How did they miss?';
     document.getElementById('pen-miss-grid').innerHTML=`
-      <button class="obtn" onclick="selectPenMiss('saved_gk')">🧤 Saved by GK</button>
-      <button class="obtn" onclick="selectPenMiss('offtarget')">↗️ Missed Target</button>`;
+      <button class="obtn" onclick="selectPenMiss('saved_gk',this)">🧤 Saved by GK</button>
+      <button class="obtn" onclick="selectPenMiss('offtarget',this)">↗️ Missed Target</button>`;
   }
   _penResult=''; _penMissDetail='';
   document.getElementById('pen-miss-detail').style.display='none';
   document.querySelectorAll('#pen-result-grid .obtn').forEach(b=>b.classList.remove('sel'));
 }
 
-function selectPenResult(result){
+function selectPenResult(result,btn){
   _penResult=result;
   document.querySelectorAll('#pen-result-grid .obtn').forEach(b=>b.classList.remove('sel'));
-  event.target.classList.add('sel');
+  if(btn) btn.classList.add('sel');
   document.getElementById('pen-miss-detail').style.display = result==='missed'?'block':'none';
   _penMissDetail='';
   document.querySelectorAll('#pen-miss-grid .obtn').forEach(b=>b.classList.remove('sel'));
 }
 
-function selectPenMiss(detail){
+function selectPenMiss(detail,btn){
   _penMissDetail=detail;
   document.querySelectorAll('#pen-miss-grid .obtn').forEach(b=>b.classList.remove('sel'));
-  event.target.classList.add('sel');
+  if(btn) btn.classList.add('sel');
 }
 
 function submitPenalty(){
@@ -1882,22 +1898,7 @@ function submitPenalty(){
 }
 
 // ── Update updStat to handle penalty stats ────────────────────────────────
-function updStat(name,type,outcome){
-  const p=G.players.find(x=>fname(x)===name); if(!p) return;
-  const s=p.stats; const inc=k=>s[k]=(s[k]||0)+1;
-  if(type==='goal')inc('goals'); else if(type==='assist')inc('assists');
-  else if(type==='save')inc('saves'); else if(type==='conceded')inc('conceded');
-  else if(type==='shot-on')inc('shotsOn'); else if(type==='shot-off')inc('shotsOff');
-  else if(type==='shot-blk')inc('shotsBlk');
-  else if(type==='tackle'){inc('tackles');if(outcome==='Successful')inc('tacklesW');}
-  else if(type==='clearance'){inc('clearances');if(outcome==='Successful')inc('clearancesG');}
-  else if(type==='corner')inc('corners');
-  else if(type==='yellow')inc('yellows'); else if(type==='red')inc('reds');
-  else if(type==='penWon')inc('pensWon');
-  else if(type==='penGoal')inc('penGoals');
-  else if(type==='penMiss')inc('penMisses');
-  else if(type==='penConceded')inc('pensConceded');
-}
+
 
 // ═══ PENALTY SHOOTOUT ═══
 let _shootout = {
