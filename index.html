@@ -379,6 +379,7 @@ input[readonly]{cursor:default;}
         </div></div>
         <div class="ecat cat-set"><div class="ecat-title">🚩 Set Pieces</div><div class="abtns">
           <button class="abtn" onclick="openEModal('corner')"><span>🚩</span>Corner</button>
+          <button class="abtn" onclick="openPenaltyModal()"><span>🎯</span>Penalty</button>
         </div></div>
       </div>
       <div class="ecat" style="border-color:rgba(204,0,0,0.25);"><div class="ecat-title" style="color:var(--red-dark);">🥅 Goal Against</div><div class="abtns">
@@ -413,11 +414,15 @@ input[readonly]{cursor:default;}
     <span id="review-match-label" style="font-size:12px;color:var(--muted);"></span>
   </div>
   <div id="review-not-ready" style="display:block;">
-    <div class="empty"><div class="empty-ico">⭐</div>Ratings are available after Full Time is called.</div>
+    <div class="empty">
+      <div class="empty-ico">⭐</div>
+      <div style="margin-bottom:12px;">Ratings are available after Full Time is called.</div>
+      <div style="font-size:11px;color:var(--muted);">Once the match has ended you can return to this tab at any time to complete your ratings.</div>
+    </div>
   </div>
   <div id="review-ready" style="display:none;">
     <div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px;">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Rate each player 1–10 in each category. Your ratings are private — only the combined average is shared.</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Rate each player 1–10 in each category. Your ratings are private — only the combined average is shared. You can leave and return to complete your ratings later.</div>
       <label>Your Coach Name</label>
       <input type="text" id="review-coach-name" placeholder="e.g. Rob" style="max-width:200px;margin-bottom:16px;">
       <div id="review-players-list"></div>
@@ -572,6 +577,57 @@ input[readonly]{cursor:default;}
       <button class="btn btn-red btn-sm" id="mf-del" style="display:none" onclick="deleteFixture()">🗑️ Delete</button>
       <button class="btn btn-red" onclick="saveFixture()">💾 Save Fixture</button>
     </div>
+  </div>
+</div>
+
+<!-- PENALTY MODAL -->
+<div class="mo" id="mo-penalty">
+  <div class="modal">
+    <div class="modal-title">🎯 Penalty</div>
+
+    <!-- Step 1: Which team -->
+    <div id="pen-step1">
+      <label>Which team wins the penalty?</label>
+      <div class="outcome-grid">
+        <button class="obtn" id="pen-thackley-btn" onclick="selectPenTeam('thackley')">⚽ Thackley</button>
+        <button class="obtn" id="pen-opp-btn" onclick="selectPenTeam('opp')">🆚 <span id="pen-opp-name">Opponent</span></button>
+      </div>
+    </div>
+
+    <!-- Step 2: Player -->
+    <div id="pen-step2" style="display:none;">
+      <label id="pen-player-label">Player taking penalty</label>
+      <select id="pen-player"><option value="">Select player...</option></select>
+
+      <!-- Result -->
+      <label style="margin-top:14px;">Result</label>
+      <div class="outcome-grid" id="pen-result-grid">
+        <button class="obtn" onclick="selectPenResult('goal')">⚽ Goal</button>
+        <button class="obtn" onclick="selectPenResult('missed')">❌ Missed</button>
+      </div>
+
+      <!-- If missed -->
+      <div id="pen-miss-detail" style="display:none;margin-top:10px;">
+        <label id="pen-miss-label">How was it missed?</label>
+        <div class="outcome-grid" id="pen-miss-grid"></div>
+      </div>
+    </div>
+
+    <label style="margin-top:14px;">Time</label>
+    <input type="text" id="pen-time" readonly style="color:var(--red);">
+
+    <div class="mfooter">
+      <button class="btn btn-ghost" onclick="closeM('mo-penalty')">Cancel</button>
+      <button class="btn btn-red" onclick="submitPenalty()">✅ Log Penalty</button>
+    </div>
+  </div>
+</div>
+
+<!-- PENALTY SHOOTOUT MODAL -->
+<div class="mo" id="mo-shootout">
+  <div class="modal modal-lg" style="max-width:560px;">
+    <div class="modal-title">🥅 Penalty Shootout</div>
+    <div id="shootout-content"></div>
   </div>
 </div>
 
@@ -811,7 +867,7 @@ function startMatch(){
     comp:document.getElementById('s-comp').value,gtype:document.getElementById('s-gtype').value,
     captain:document.getElementById('s-captain').value,
     ql:parseInt(document.getElementById('s-ql').value)||10,startN:parseInt(document.getElementById('s-start').value)||5};
-  G.score={home:0,away:0}; G.events=[]; G.timer={running:false,sec:0,iv:null};
+  G.score={home:0,away:0}; G.events=[]; G.timer={running:false,sec:0,iv:null}; G.shootout=null;
   G.quarter=1; G.phase='live'; G.extraPlayers=[]; G.started=true;
   updateLiveUI(); switchTab('live');
   showToast('Match started! Come on Thackley! ⚽');
@@ -882,11 +938,17 @@ function fullTime(){
   pushEv({type:'sys',subtype:'ft',time:getTS(),sec:G.timer.sec,quarter:G.quarter,playerName:'',extra:{},icon:'🏁',desc:'Full Time'});
   for(let i=1;i<=4;i++) document.getElementById('qp'+i)?.classList.replace('active','done');
   showToast('Full time! Save the match 💾');
+  checkShootoutPrompt();
   setTimeout(()=>{
-    if(confirm('Full time! Would you like to rate the players now?')){
-      switchTab('review');
-    }
-  }, 500);
+    // Cup game with level score — shootout prompt takes priority
+    if(G.match.gtype==='Cup' && G.score.home===G.score.away) return;
+    // All other games — go straight to stats summary
+    switchTab('stats');
+    // Show a gentle nudge about ratings after a short delay
+    setTimeout(()=>{
+      showToast('⭐ Don\'t forget to rate your players in the Review tab!');
+    }, 2000);
+  }, 800);
 }
 
 function setBadge(txt,cls){const b=document.getElementById('sb-q');b.textContent=txt;b.className='qbadge'+(cls?' '+cls:'');}
@@ -1002,18 +1064,7 @@ function submitEvent(){
   updScoreDisp(); renderELog(); updLiveStrip(); checkHandicap(); closeM('mo-event');
 }
 
-function updStat(name,type,outcome){
-  const p=G.players.find(x=>fname(x)===name); if(!p) return;
-  const s=p.stats; const inc=k=>s[k]=(s[k]||0)+1;
-  if(type==='goal')inc('goals'); else if(type==='assist')inc('assists');
-  else if(type==='save')inc('saves'); else if(type==='conceded')inc('conceded');
-  else if(type==='shot-on')inc('shotsOn'); else if(type==='shot-off')inc('shotsOff');
-  else if(type==='shot-blk')inc('shotsBlk');
-  else if(type==='tackle'){inc('tackles');if(outcome==='Successful')inc('tacklesW');}
-  else if(type==='clearance'){inc('clearances');if(outcome==='Successful')inc('clearancesG');}
-  else if(type==='corner')inc('corners');
-  else if(type==='yellow')inc('yellows'); else if(type==='red')inc('reds');
-}
+// updStat defined in penalty section
 
 // ═══ HANDICAP ═══
 function checkHandicap(){
@@ -1107,7 +1158,7 @@ function renderSquadStats(){
   const CLS={GK:'pos-gk',DEF:'pos-def',MID:'pos-mid',FWD:'pos-fwd',SUB:'pos-unk'};
   grid.innerHTML=G.players.map(p=>{
     const s=p.stats||{},pos=p.posQ[G.quarter-1]||'SUB',c=CLS[pos]||'pos-unk';
-    const rows=[['⚽',s.goals||0,'Goals'],['🅰',s.assists||0,'Asst'],['🧤',s.saves||0,'Saves'],['🎯',s.shotsOn||0,'On Tgt'],['💪',s.tacklesW||0,'Tackles'],['👟',s.clearancesG||0,'Clear']];
+    const penTaken=(s.penGoals||0)+(s.penMisses||0);const rows=[['⚽',s.goals||0,'Goals'],['🅰',s.assists||0,'Asst'],['🧤',s.saves||0,'Saves'],['🎯',s.shotsOn||0,'On Tgt'],['💪',s.tacklesW||0,'Tackles'],['👟',s.clearancesG||0,'Clear'],['🎯',penTaken>0?(s.penGoals||0)+'/'+penTaken:'—','Pens']];
     return`<div class="sqc"><div class="sqtop"><div class="sqnum">${p.number}</div><div><div class="sqname">${fname(p)}</div><span class="sqpos ${c}">${pos}</span></div></div>
       <div class="sq-stats">${rows.map(([ic,v,l])=>`<div class="sqst"><div class="sqstv">${v}</div><div class="sqstl">${ic} ${l}</div></div>`).join('')}</div></div>`;
   }).join('');
@@ -1257,7 +1308,7 @@ async function saveMatch(){
   G._savedMatchId=matchId;
   const matchData={id:matchId,label,match:{...G.match},
     players:G.players.map(p=>({...p,stats:{...p.stats||{}},posQ:[...p.posQ]})),
-    events:[...G.events],score:{...G.score},savedAt:new Date().toISOString()};
+    events:[...G.events],score:{...G.score},shootout:G.shootout||null,savedAt:new Date().toISOString()};
   try{
     await window._db.set('matches',matchId,matchData);
     _cachedMatches.unshift(matchData);
@@ -1314,7 +1365,8 @@ function showReport(id){
       ${m.match?.captain?`<div style="font-size:12px;margin-top:6px;">🏅 Captain: <strong>${m.match.captain}</strong></div>`:''}
     </div></div>
     <div class="rsec"><h3>Player Stats</h3>${pRows||'<div style="color:var(--muted)">No stats</div>'}</div>
-    <div class="rsec"><h3>Timeline</h3>${tl||'<div style="color:var(--muted);font-size:12px;">No events</div>'}</div>`;
+    <div class="rsec"><h3>Timeline</h3>${tl||'<div style="color:var(--muted);font-size:12px;">No events</div>'}</div>
+    ${m.shootout?`<div class="rsec"><h3>\uD83E\uDD45 Penalty Shootout</h3><div style="text-align:center;padding:10px 0;margin-bottom:12px;"><div style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:var(--red);letter-spacing:4px;">${m.shootout.tScore} \u2014 ${m.shootout.oScore}</div><div style="font-size:13px;font-weight:700;">Thackley ${m.shootout.winner==='thackley'?'WIN \uD83C\uDFC6':'lose'} on penalties</div></div><div><strong>Thackley kicks:</strong></div>${(m.shootout.thackley||[]).map((r,i)=>`<div class="rrow"><span>Kick ${i+1}</span><span style="font-weight:700;color:${r==='goal'?'var(--red)':'#888'}">${r==='goal'?'\u26bd Goal':r==='saved'?'\uD83E\uDDE4 Saved':'\u2197\uFE0F Off Target'}</span></div>`).join('')}<div style="margin-top:8px;"><strong>${m.match&&m.match.opp?m.match.opp:'Opponent'} kicks:</strong></div>${(m.shootout.opp||[]).map((r,i)=>`<div class="rrow"><span>Kick ${i+1}</span><span style="font-weight:700;color:${r==='goal'?'#888':'var(--red)'}">${r==='goal'?'\u26bd Goal':r==='saved'?'\uD83E\uDDE4 Saved by GK':'\u2197\uFE0F Off Target'}</span></div>`).join('')}</div>`:''}`;
   document.getElementById('rep-del').onclick=async()=>{
     if(!confirm('Delete this match?'))return;
     try{await window._db.del('matches',String(id));_cachedMatches=_cachedMatches.filter(x=>x.id!==id);closeM('mo-report');renderSaved();showToast('Match deleted');}
@@ -1364,7 +1416,7 @@ function switchTab(t){
 }
 
 function renderReviewTab(){
-  const ready = G.started && G.phase==='ft';
+  const ready = G.started && (G.phase==='ft' || Object.keys(G._pendingRatings||{}).length>0);
   document.getElementById('review-not-ready').style.display = ready?'none':'block';
   document.getElementById('review-ready').style.display = ready?'block':'none';
   if(!ready) return;
@@ -1487,8 +1539,9 @@ async function renderCombinedResults(){
   if(G._pendingRatings){
     Object.entries(G._pendingRatings).forEach(([coach,ratings])=>{allRatings[coach]=ratings;});
   }
-  // Try to load from DB
-  if(G._savedMatchId){
+  // Try to load from DB — always attempt this so coaches returning later see combined scores
+  const matchIdToCheck = G._savedMatchId;
+  if(matchIdToCheck){
     try{
       const dbRatings=await window._db.list('ratings');
       dbRatings.filter(r=>r.coach&&r.ratings&&String(r.id||'').startsWith(G._savedMatchId)).forEach(r=>{allRatings[r.coach]=r.ratings;});
@@ -1722,6 +1775,335 @@ function loadFixtureIntoSetup(id){
   },100);
   switchTab('setup');
   showToast('Fixture loaded! Review and start when ready 🚀');
+}
+
+
+// ═══ PENALTY EVENT ═══
+let _penTeam = ''; // 'thackley' or 'opp'
+let _penResult = ''; // 'goal' or 'missed'
+let _penMissDetail = ''; // 'saved' / 'offtarget' / 'saved_gk' / 'offtarget_opp'
+
+function openPenaltyModal(){
+  _penTeam=''; _penResult=''; _penMissDetail='';
+  document.getElementById('pen-step1').style.display='block';
+  document.getElementById('pen-step2').style.display='none';
+  document.getElementById('pen-miss-detail').style.display='none';
+  document.getElementById('pen-opp-name').textContent = G.match.opp||'Opponent';
+  document.getElementById('pen-opp-btn').querySelector('span').textContent = G.match.opp||'Opponent';
+  document.getElementById('pen-time').value = 'Q'+G.quarter+' — '+getTS();
+  document.querySelectorAll('#mo-penalty .obtn').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('mo-penalty').classList.add('open');
+}
+
+function selectPenTeam(team){
+  _penTeam = team;
+  document.getElementById('pen-thackley-btn').classList.toggle('sel', team==='thackley');
+  document.getElementById('pen-opp-btn').classList.toggle('sel', team==='opp');
+  document.getElementById('pen-step2').style.display='block';
+  // Set player label and options
+  if(team==='thackley'){
+    document.getElementById('pen-player-label').textContent='Thackley player taking the penalty';
+    const opts='<option value="">Select player...</option>'+G.players.filter(p=>p.onPitch).map(p=>`<option value="${fname(p)}">#${p.number} ${fname(p)}</option>`).join('');
+    document.getElementById('pen-player').innerHTML=opts;
+    document.getElementById('pen-miss-label').textContent='How was it missed?';
+    document.getElementById('pen-miss-grid').innerHTML=`
+      <button class="obtn" onclick="selectPenMiss('saved')">🧤 Saved</button>
+      <button class="obtn" onclick="selectPenMiss('offtarget')">↗️ Missed Target</button>`;
+  } else {
+    document.getElementById('pen-player-label').textContent='Thackley player who conceded the penalty';
+    const opts='<option value="">Select player...</option>'+G.players.filter(p=>p.onPitch).map(p=>`<option value="${fname(p)}">#${p.number} ${fname(p)}</option>`).join('');
+    document.getElementById('pen-player').innerHTML=opts;
+    document.getElementById('pen-miss-label').textContent='How did they miss?';
+    document.getElementById('pen-miss-grid').innerHTML=`
+      <button class="obtn" onclick="selectPenMiss('saved_gk')">🧤 Saved by GK</button>
+      <button class="obtn" onclick="selectPenMiss('offtarget')">↗️ Missed Target</button>`;
+  }
+  _penResult=''; _penMissDetail='';
+  document.getElementById('pen-miss-detail').style.display='none';
+  document.querySelectorAll('#pen-result-grid .obtn').forEach(b=>b.classList.remove('sel'));
+}
+
+function selectPenResult(result){
+  _penResult=result;
+  document.querySelectorAll('#pen-result-grid .obtn').forEach(b=>b.classList.remove('sel'));
+  event.target.classList.add('sel');
+  document.getElementById('pen-miss-detail').style.display = result==='missed'?'block':'none';
+  _penMissDetail='';
+  document.querySelectorAll('#pen-miss-grid .obtn').forEach(b=>b.classList.remove('sel'));
+}
+
+function selectPenMiss(detail){
+  _penMissDetail=detail;
+  document.querySelectorAll('#pen-miss-grid .obtn').forEach(b=>b.classList.remove('sel'));
+  event.target.classList.add('sel');
+}
+
+function submitPenalty(){
+  if(!_penTeam){showToast('Select which team wins the penalty','warn');return;}
+  const player=document.getElementById('pen-player').value;
+  if(!player){showToast('Select a player','warn');return;}
+  if(!_penResult){showToast('Select the result','warn');return;}
+  if(_penResult==='missed'&&!_penMissDetail){showToast('Select how it was missed','warn');return;}
+
+  const isThackley=_penTeam==='thackley';
+  const opp=G.match.opp||'Opponent';
+  let desc='', icon='🎯';
+
+  if(isThackley){
+    if(_penResult==='goal'){
+      desc=`Penalty GOAL! Scored by ${player}`;
+      icon='⚽'; G.score.home++;
+      updStat(player,'penGoal','');
+    } else {
+      const missText=_penMissDetail==='saved'?'Saved':'Missed Target';
+      desc=`Penalty missed by ${player} — ${missText}`;
+      icon='❌';
+      updStat(player,'penMiss',_penMissDetail);
+    }
+    updStat(player,'penWon','');
+  } else {
+    if(_penResult==='goal'){
+      desc=`Penalty conceded by ${player} — ${opp} score!`;
+      icon='🥅'; G.score.away++;
+      updStat(player,'penConceded','');
+    } else {
+      const missText=_penMissDetail==='saved_gk'?'Saved by GK':'Missed Target';
+      desc=`Penalty won! ${player} conceded — ${opp} ${missText}`;
+      icon='🧤';
+      updStat(player,'penConceded','');
+    }
+  }
+
+  pushEv({type:'penalty',subtype:_penTeam+'_'+_penResult,time:getTS(),sec:G.timer.sec,
+    quarter:G.quarter,playerName:player,extra:{team:_penTeam,result:_penResult,missDetail:_penMissDetail},
+    icon,desc});
+  updScoreDisp(); updLiveStrip(); closeM('mo-penalty');
+  showToast(isThackley&&_penResult==='goal'?'PENALTY GOAL! ⚽':'Penalty logged');
+}
+
+// ── Update updStat to handle penalty stats ────────────────────────────────
+function updStat(name,type,outcome){
+  const p=G.players.find(x=>fname(x)===name); if(!p) return;
+  const s=p.stats; const inc=k=>s[k]=(s[k]||0)+1;
+  if(type==='goal')inc('goals'); else if(type==='assist')inc('assists');
+  else if(type==='save')inc('saves'); else if(type==='conceded')inc('conceded');
+  else if(type==='shot-on')inc('shotsOn'); else if(type==='shot-off')inc('shotsOff');
+  else if(type==='shot-blk')inc('shotsBlk');
+  else if(type==='tackle'){inc('tackles');if(outcome==='Successful')inc('tacklesW');}
+  else if(type==='clearance'){inc('clearances');if(outcome==='Successful')inc('clearancesG');}
+  else if(type==='corner')inc('corners');
+  else if(type==='yellow')inc('yellows'); else if(type==='red')inc('reds');
+  else if(type==='penWon')inc('pensWon');
+  else if(type==='penGoal')inc('penGoals');
+  else if(type==='penMiss')inc('penMisses');
+  else if(type==='penConceded')inc('pensConceded');
+}
+
+// ═══ PENALTY SHOOTOUT ═══
+let _shootout = {
+  active:false, round:1, turn:'thackley', firstTeam:'thackley',
+  thackley:[], opp:[], suddenDeath:false, winner:null
+};
+
+function checkShootoutPrompt(){
+  // Only for Cup games, level score at full time
+  if(G.match.gtype==='Cup' && G.score.home===G.score.away && G.phase==='ft'){
+    setTimeout(()=>{
+      if(confirm('Scores are level after full time — would you like to start a Penalty Shootout?')){
+        openShootoutSetup();
+      }
+    }, 800);
+  }
+}
+
+function openShootoutSetup(){
+  _shootout={active:false,round:1,turn:'thackley',firstTeam:'thackley',thackley:[],opp:[],suddenDeath:false,winner:null};
+  const opp=G.match.opp||'Opponent';
+  document.getElementById('shootout-content').innerHTML=`
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">Select which team takes the first penalty.</p>
+    <div class="outcome-grid">
+      <button class="obtn sel" id="so-first-thackley" onclick="selectFirstTeam('thackley')">⚽ Thackley</button>
+      <button class="obtn" id="so-first-opp" onclick="selectFirstTeam('opp')">🆚 ${opp}</button>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-ghost" onclick="closeM('mo-shootout')">Cancel</button>
+      <button class="btn btn-red" onclick="startShootout()">🥅 Start Shootout</button>
+    </div>`;
+  document.getElementById('mo-shootout').classList.add('open');
+}
+
+function selectFirstTeam(team){
+  _shootout.firstTeam=team;
+  _shootout.turn=team;
+  document.getElementById('so-first-thackley').classList.toggle('sel',team==='thackley');
+  document.getElementById('so-first-opp').classList.toggle('sel',team==='opp');
+}
+
+function startShootout(){
+  _shootout.active=true;
+  _shootout.turn=_shootout.firstTeam;
+  renderShootout();
+}
+
+function renderShootout(){
+  const opp=G.match.opp||'Opponent';
+  const tScore=_shootout.thackley.filter(p=>p==='goal').length;
+  const oScore=_shootout.opp.filter(p=>p==='goal').length;
+  const tTaken=_shootout.thackley.length;
+  const oTaken=_shootout.opp.length;
+  const maxPens=_shootout.suddenDeath?999:5;
+
+  // Check for early win / end
+  if(!_shootout.winner){
+    const winner=checkShootoutWinner();
+    if(winner) _shootout.winner=winner;
+  }
+
+  const renderDots=(kicks,max)=>{
+    let dots='';
+    for(let i=0;i<(max===999?Math.max(kicks.length+1,1):max);i++){
+      if(i<kicks.length){
+        dots+=`<span style="display:inline-block;width:24px;height:24px;border-radius:50%;background:${kicks[i]==='goal'?'var(--red)':'#ddd'};margin:2px;line-height:24px;text-align:center;font-size:12px;">${kicks[i]==='goal'?'⚽':'❌'}</span>`;
+      } else if(i===kicks.length&&!_shootout.winner){
+        dots+=`<span style="display:inline-block;width:24px;height:24px;border-radius:50%;border:2px solid var(--red);margin:2px;"></span>`;
+      } else {
+        dots+=`<span style="display:inline-block;width:24px;height:24px;border-radius:50%;border:2px solid #eee;margin:2px;"></span>`;
+      }
+    }
+    return dots;
+  };
+
+  let content=`
+    <div style="text-align:center;margin-bottom:16px;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">${_shootout.suddenDeath?'⚡ Sudden Death':'Round '+_shootout.round+' of 5'}</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:20px;">
+        <div style="text-align:center;">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:1px;color:var(--muted);">THACKLEY</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:52px;color:var(--red);line-height:1;">${tScore}</div>
+          <div>${renderDots(_shootout.thackley,_shootout.suddenDeath?_shootout.thackley.length+1:5)}</div>
+        </div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:32px;color:var(--muted);">—</div>
+        <div style="text-align:center;">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:1px;color:var(--muted);">${opp.toUpperCase()}</div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:52px;color:#888;line-height:1;">${oScore}</div>
+          <div>${renderDots(_shootout.opp,_shootout.suddenDeath?_shootout.opp.length+1:5)}</div>
+        </div>
+      </div>
+    </div>`;
+
+  if(_shootout.winner){
+    const winnerName=_shootout.winner==='thackley'?'Thackley':opp;
+    content+=`
+      <div style="text-align:center;background:rgba(204,0,0,0.08);border:2px solid var(--red);border-radius:12px;padding:20px;margin-bottom:16px;">
+        <div style="font-size:32px;margin-bottom:8px;">🏆</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--red);letter-spacing:2px;">${winnerName} WIN!</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px;">${tScore} — ${oScore} on penalties</div>
+      </div>
+      <div class="mfooter">
+        <button class="btn btn-red" onclick="saveShootoutResult()">💾 Save Result</button>
+      </div>`;
+  } else {
+    // Current taker
+    const isThackleyTurn=_shootout.turn==='thackley';
+    content+=`
+      <div style="background:#f9f9f9;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">
+          ${isThackleyTurn?'⚽ Thackley's turn':'🆚 '+opp+''s turn'}
+        </div>
+        ${isThackleyTurn?`
+          <label>Player taking penalty</label>
+          <select id="so-player" style="margin-bottom:12px;"><option value="">Select player...</option>${G.players.filter(p=>p.onPitch||p.posQ.some(x=>x!=='SUB')).map(p=>`<option value="${fname(p)}">#${p.number} ${fname(p)}</option>`).join('')}</select>
+          <label>Result</label>
+          <div class="outcome-grid">
+            <button class="obtn" onclick="recordShootoutKick('thackley','goal')">⚽ Goal</button>
+            <button class="obtn" onclick="recordShootoutKick('thackley','saved')">🧤 Saved</button>
+            <button class="obtn" onclick="recordShootoutKick('thackley','offtarget')">↗️ Off Target</button>
+          </div>` : `
+          <label>Result</label>
+          <div class="outcome-grid">
+            <button class="obtn" onclick="recordShootoutKick('opp','goal')">⚽ Goal</button>
+            <button class="obtn" onclick="recordShootoutKick('opp','saved')">🧤 Saved by GK</button>
+            <button class="obtn" onclick="recordShootoutKick('opp','offtarget')">↗️ Off Target</button>
+          </div>`}
+      </div>`;
+  }
+
+  document.getElementById('shootout-content').innerHTML=content;
+}
+
+function recordShootoutKick(team, result){
+  const isGoal=result==='goal';
+  if(team==='thackley'){
+    const player=document.getElementById('so-player')?.value||'';
+    if(!player){showToast('Select a player','warn');return;}
+    _shootout.thackley.push(result);
+    // Log to timeline
+    const desc=isGoal?`Shootout: ${player} SCORES! ⚽`:`Shootout: ${player} ${result==='saved'?'saved':'off target'} ❌`;
+    pushEv({type:'shootout',subtype:result,time:getTS(),sec:G.timer.sec,quarter:G.quarter,playerName:player,extra:{team:'thackley',result},icon:isGoal?'⚽':'❌',desc});
+  } else {
+    _shootout.opp.push(result);
+    const opp=G.match.opp||'Opponent';
+    const desc=isGoal?`Shootout: ${opp} SCORE ⚽`:`Shootout: ${opp} ${result==='saved'?'saved by GK':'off target'} ❌`;
+    pushEv({type:'shootout',subtype:result,time:getTS(),sec:G.timer.sec,quarter:G.quarter,playerName:'',extra:{team:'opp',result},icon:isGoal?'🥅':'🧤',desc});
+  }
+
+  // Advance turn
+  const maxPens=_shootout.suddenDeath?1:5;
+  const tTaken=_shootout.thackley.length;
+  const oTaken=_shootout.opp.length;
+
+  // Switch turns
+  if(_shootout.turn===_shootout.firstTeam){
+    _shootout.turn=_shootout.firstTeam==='thackley'?'opp':'thackley';
+  } else {
+    _shootout.turn=_shootout.firstTeam;
+    if(!_shootout.suddenDeath) _shootout.round++;
+    // Check for sudden death
+    if(!_shootout.suddenDeath && _shootout.round>5){
+      const tScore=_shootout.thackley.filter(p=>p==='goal').length;
+      const oScore=_shootout.opp.filter(p=>p==='goal').length;
+      if(tScore===oScore) _shootout.suddenDeath=true;
+    }
+  }
+
+  renderShootout();
+}
+
+function checkShootoutWinner(){
+  const tKicks=_shootout.thackley;
+  const oKicks=_shootout.opp;
+  const tScore=tKicks.filter(p=>p==='goal').length;
+  const oScore=oKicks.filter(p=>p==='goal').length;
+  const tTaken=tKicks.length;
+  const oTaken=oKicks.length;
+  const maxPens=_shootout.suddenDeath?1:5;
+
+  if(_shootout.suddenDeath){
+    // Sudden death: if both taken same number and scores differ
+    if(tTaken===oTaken&&tTaken>0&&tScore!==oScore) return tScore>oScore?'thackley':'opp';
+    return null;
+  }
+
+  // Early win check
+  const tRemaining=maxPens-tTaken;
+  const oRemaining=maxPens-oTaken;
+  if(tScore>oScore+oRemaining) return 'thackley';
+  if(oScore>tScore+tRemaining) return 'opp';
+  // Both finished 5
+  if(tTaken>=maxPens&&oTaken>=maxPens&&tScore!==oScore) return tScore>oScore?'thackley':'opp';
+  return null;
+}
+
+function saveShootoutResult(){
+  const tScore=_shootout.thackley.filter(p=>p==='goal').length;
+  const oScore=_shootout.opp.filter(p=>p==='goal').length;
+  const opp=G.match.opp||'Opponent';
+  G.shootout={...JSON.parse(JSON.stringify(_shootout)),tScore,oScore};
+  pushEv({type:'shootout_result',subtype:'',time:getTS(),sec:G.timer.sec,quarter:G.quarter,playerName:'',
+    extra:{tScore,oScore,winner:_shootout.winner},
+    icon:'🏆',desc:`Penalty shootout: Thackley ${tScore} — ${oScore} ${opp}. ${_shootout.winner==='thackley'?'Thackley win!':opp+' win!'}`});
+  closeM('mo-shootout');
+  showToast(`Shootout saved! ${_shootout.winner==='thackley'?'Thackley win! 🏆':opp+' win'}`);
 }
 
 
