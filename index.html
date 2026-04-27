@@ -403,6 +403,7 @@ input[readonly]{cursor:default;}
         <div class="ecat cat-set"><div class="ecat-title">🚩 Set Pieces</div><div class="abtns">
           <button class="abtn" onclick="openEModal('corner')"><span>🚩</span>Corner</button>
           <button class="abtn" onclick="openPenaltyModal()"><span>🎯</span>Penalty</button>
+          <button class="abtn" onclick="openFreeKickModal()"><span>🆓</span>Free Kick</button>
         </div></div>
       </div>
       <div class="ecat" style="border-color:rgba(204,0,0,0.25);margin-bottom:10px;"><div class="ecat-title" style="color:var(--red-dark);">Goal Against</div><div class="abtns">
@@ -412,7 +413,6 @@ input[readonly]{cursor:default;}
         <button class="abtn" onclick="openEModal('yellow')"><span>🟡</span>Yellow</button>
         <button class="abtn" onclick="openEModal('red')"><span>🔴</span>Red Card</button>
         <button class="abtn" onclick="openEModal('sub')"><span>🔄</span>Sub</button>
-        <button class="abtn" onclick="openEModal('foul')"><span>⚠️</span>Foul Won</button>
         <button class="abtn" onclick="openEModal('note')"><span>📝</span>Note</button>
       </div></div>
     </div>
@@ -607,6 +607,49 @@ input[readonly]{cursor:default;}
       <button class="btn btn-ghost" onclick="closeM('mo-fixture')">Cancel</button>
       <button class="btn btn-red btn-sm" id="mf-del" style="display:none" onclick="deleteFixture()">Delete</button>
       <button class="btn btn-red" onclick="saveFixture()">Save Fixture</button>
+    </div>
+  </div>
+</div>
+
+<!-- FREE KICK MODAL -->
+<div class="mo" id="mo-freekick">
+  <div class="modal">
+    <div class="modal-title">🆓 Free Kick</div>
+
+    <!-- Step 1: Who won it and who's taking it -->
+    <div id="fk-step1">
+      <label>Player Who Won the Free Kick</label>
+      <select id="fk-won-player"><option value="">Select player...</option></select>
+      <label>Player Taking the Free Kick</label>
+      <select id="fk-taker"><option value="">Select player...</option></select>
+      <label>Time</label>
+      <input type="text" id="fk-time" readonly style="color:var(--red);">
+      <div class="mfooter">
+        <button class="btn btn-ghost" onclick="closeM('mo-freekick')">Cancel</button>
+        <button class="btn btn-red" onclick="fkStep2()">Next →</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Outcome -->
+    <div id="fk-step2" style="display:none;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;" id="fk-summary"></div>
+      <label>Outcome</label>
+      <div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
+        <button class="obtn" onclick="submitFreeKick('pass')">🔄 Pass</button>
+        <button class="obtn" onclick="fkShotOptions(this)">🎯 Shot</button>
+      </div>
+      <div id="fk-shot-opts" style="display:none;margin-top:10px;">
+        <label>Shot Result</label>
+        <div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
+          <button class="obtn" onclick="submitFreeKick('blocked')">🛡️ Blocked</button>
+          <button class="obtn" onclick="submitFreeKick('off-target')">↗️ Off Target</button>
+          <button class="obtn" onclick="submitFreeKick('on-target')">🎯 On Target</button>
+          <button class="obtn" onclick="submitFreeKick('goal')">⚽ Goal!</button>
+        </div>
+      </div>
+      <div class="mfooter" style="justify-content:flex-start;">
+        <button class="btn btn-ghost btn-sm" onclick="fkBackToStep1()">← Back</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1108,6 +1151,7 @@ function updStat(name,type,outcome){
   else if(type==='yellow')inc('yellows'); else if(type==='red')inc('reds');
   else if(type==='penWon')inc('pensWon'); else if(type==='penGoal')inc('penGoals');
   else if(type==='penMiss')inc('penMisses'); else if(type==='penConceded')inc('pensConceded');
+  else if(type==='fkWon')inc('fkWon');
 }
 
 // ═══ HANDICAP ═══
@@ -1215,6 +1259,7 @@ function getPlayerSeasonStats(matches){
       pl.tacklesW+=(s.tacklesW||0);pl.clearancesG+=(s.clearancesG||0);
       pl.corners+=(s.corners||0);pl.yellows+=(s.yellows||0);pl.reds+=(s.reds||0);
       pl.penGoals+=(s.penGoals||0);pl.penMisses+=(s.penMisses||0);pl.pensConceded+=(s.pensConceded||0);
+      pl.fkWon=(pl.fkWon||0)+(s.fkWon||0);
       if(played||Object.values(s).some(v=>v>0)) pl.matches.push({opp,date,score,matchId:m.id,stats:{...s},played});
     });
   });
@@ -1896,6 +1941,99 @@ function buildShootoutSection(m){
   return'<div class="rsec"><h3>Penalty Shootout</h3><div style="text-align:center;padding:10px 0;margin-bottom:12px;"><div style="font-family:Bebas Neue,sans-serif;font-size:40px;color:var(--red);">'+so.tScore+' - '+so.oScore+'</div><div style="font-size:13px;font-weight:700;">Thackley '+(so.winner==='thackley'?'WIN':'lose')+' on penalties</div></div><div><strong>Thackley kicks:</strong></div>'+tKicks+'<div style="margin-top:8px;"><strong>'+opp+' kicks:</strong></div>'+oKicks+'</div>';
 }
 
+
+// ═══ FREE KICK ═══
+let _fkWinner = '', _fkTaker = '';
+
+function openFreeKickModal(){
+  _fkWinner=''; _fkTaker='';
+  // Populate player dropdowns
+  const opts = '<option value="">Select player...</option>' +
+    G.players.filter(p=>p.onPitch).map(p=>`<option value="${fname(p)}">#${p.number} ${fname(p)} (${p.posQ[G.quarter-1]})</option>`).join('');
+  document.getElementById('fk-won-player').innerHTML = opts;
+  document.getElementById('fk-taker').innerHTML = opts;
+  document.getElementById('fk-time').value = 'Q'+G.quarter+' — '+getTS();
+  // Reset to step 1
+  document.getElementById('fk-step1').style.display='block';
+  document.getElementById('fk-step2').style.display='none';
+  document.getElementById('fk-shot-opts').style.display='none';
+  document.querySelectorAll('#mo-freekick .obtn').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('mo-freekick').classList.add('open');
+}
+
+function fkStep2(){
+  const winner = document.getElementById('fk-won-player').value;
+  const taker = document.getElementById('fk-taker').value;
+  if(!winner){showToast('Select the player who won the free kick','warn');return;}
+  if(!taker){showToast('Select the player taking the free kick','warn');return;}
+  _fkWinner = winner; _fkTaker = taker;
+  document.getElementById('fk-summary').textContent =
+    'Won by: '+winner+' · Taken by: '+taker;
+  document.getElementById('fk-step1').style.display='none';
+  document.getElementById('fk-step2').style.display='block';
+  document.getElementById('fk-shot-opts').style.display='none';
+  document.querySelectorAll('#mo-freekick .obtn').forEach(b=>b.classList.remove('sel'));
+}
+
+function fkBackToStep1(){
+  document.getElementById('fk-step1').style.display='block';
+  document.getElementById('fk-step2').style.display='none';
+}
+
+function fkShotOptions(btn){
+  document.querySelectorAll('#fk-step2 > .outcome-grid .obtn').forEach(b=>b.classList.remove('sel'));
+  if(btn)btn.classList.add('sel');
+  document.getElementById('fk-shot-opts').style.display='block';
+}
+
+function submitFreeKick(outcome){
+  const time = document.getElementById('fk-time').value;
+  const isGoal = outcome === 'goal';
+  let desc = '', icon = '🆓';
+
+  if(outcome === 'pass'){
+    desc = `Free kick — ${_fkWinner} won, ${_fkTaker} played it in`;
+    icon = '🔄';
+  } else if(outcome === 'blocked'){
+    desc = `Free kick BLOCKED — taken by ${_fkTaker}`;
+    icon = '🛡️';
+  } else if(outcome === 'off-target'){
+    desc = `Free kick off target — taken by ${_fkTaker}`;
+    icon = '↗️';
+  } else if(outcome === 'on-target'){
+    desc = `Free kick on target — taken by ${_fkTaker}`;
+    icon = '🎯';
+  } else if(isGoal){
+    desc = `FREE KICK GOAL! Scored by ${_fkTaker}`;
+    icon = '⚽';
+    G.score.home++;
+    updStat(_fkTaker, 'goal', '');
+    updScoreDisp();
+  }
+
+  // Log free kick won stat
+  updStat(_fkWinner, 'fkWon', '');
+  // Log shot stat if applicable
+  if(outcome === 'on-target') updStat(_fkTaker, 'shot-on', '');
+  if(outcome === 'off-target') updStat(_fkTaker, 'shot-off', '');
+  if(outcome === 'blocked') updStat(_fkTaker, 'shot-blk', '');
+
+  pushEv({
+    type: 'freekick',
+    subtype: outcome,
+    time: getTS(),
+    sec: G.timer.sec,
+    quarter: G.quarter,
+    playerName: _fkTaker,
+    extra: {winner: _fkWinner, taker: _fkTaker, outcome},
+    icon, desc
+  });
+
+  updLiveStrip();
+  if(isGoal) checkHandicap();
+  closeM('mo-freekick');
+  showToast(isGoal ? 'FREE KICK GOAL! ⚽' : 'Free kick logged');
+}
 
 // ═══ AUTO DELETE FIXTURE ON FULL TIME ═══
 async function autoDeleteFixture(){
