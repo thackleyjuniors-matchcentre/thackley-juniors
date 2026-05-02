@@ -526,20 +526,23 @@ input[readonly]{cursor:default;}
 
 <!-- FIXTURE MODAL -->
 <div class="mo" id="mo-fixture">
-  <div class="modal modal-lg" style="max-width:600px;"><div class="modal-title" id="mf-title">New Fixture</div>
+  <div class="modal modal-lg" style="max-width:600px;">
+    <div class="modal-title" id="mf-title">New Fixture</div>
     <input type="hidden" id="mf-id">
     <div class="g2">
       <div>
         <label>Opponent</label><input type="text" id="mf-opp" placeholder="e.g. Shipley Boys FC">
         <label>Date</label><input type="date" id="mf-date">
         <label>Venue</label><input type="text" id="mf-venue" placeholder="e.g. Thackley Park">
-        <label>Game Type</label><select id="mf-gtype"><option value="League">League</option><option value="Cup">Cup</option><option value="Friendly">Friendly</option></select>
+        <label>Game Type</label>
+        <select id="mf-gtype"><option value="League">League</option><option value="Cup">Cup</option><option value="Friendly">Friendly</option></select>
         <label>Competition</label><input type="text" id="mf-comp" placeholder="e.g. West Riding Junior League">
-        <label>Quarter Length</label><input type="number" id="mf-ql" value="10" min="3" max="30">
-        <label>Players Starting</label><select id="mf-start"><option value="5">5 players</option><option value="6">6 players</option></select>
+        <label>Quarter Length (minutes)</label><input type="number" id="mf-ql" value="10" min="3" max="30">
+        <label>Players Starting</label>
+        <select id="mf-start"><option value="5">5 players</option><option value="6">6 players</option></select>
       </div>
       <div>
-        <label style="margin-top:0;">Squad</label>
+        <label style="margin-top:0;">Squad for this Fixture</label>
         <div id="mf-player-list"></div>
         <div class="gap-row" style="margin-top:8px;">
           <button class="btn btn-ghost btn-sm" onclick="addFixturePRow()">+ Add Player</button>
@@ -548,9 +551,20 @@ input[readonly]{cursor:default;}
       </div>
     </div>
     <div class="card" style="margin-top:14px;margin-bottom:0;">
-      <div class="card-title" style="margin-bottom:10px;">Captain and Q1 Positions</div>
-      <label style="margin-top:0;">Captain</label><select id="mf-captain" style="margin-bottom:12px;"><option value="">Select captain...</option></select>
-      <div id="mf-q1pos"></div>
+      <div class="card-title" style="margin-bottom:10px;">Captain and Quarter Positions</div>
+      <label style="margin-top:0;">Captain</label>
+      <select id="mf-captain" style="margin-bottom:12px;"><option value="">Select captain...</option></select>
+      <div style="display:flex;gap:6px;margin-bottom:10px;border-bottom:2px solid var(--border);padding-bottom:0;">
+        <button class="qpos-tab active" data-fq="1" onclick="switchFQTab(1)">Q1</button>
+        <button class="qpos-tab" data-fq="2" onclick="switchFQTab(2)">Q2</button>
+        <button class="qpos-tab" data-fq="3" onclick="switchFQTab(3)">Q3</button>
+        <button class="qpos-tab" data-fq="4" onclick="switchFQTab(4)">Q4</button>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:10px;" onclick="copyFQ1ToAll()">Copy Q1 to all</button>
+      </div>
+      <div id="mf-qpos-1" class="mf-qpos-panel"></div>
+      <div id="mf-qpos-2" class="mf-qpos-panel" style="display:none;"></div>
+      <div id="mf-qpos-3" class="mf-qpos-panel" style="display:none;"></div>
+      <div id="mf-qpos-4" class="mf-qpos-panel" style="display:none;"></div>
     </div>
     <div class="mfooter">
       <button class="btn btn-ghost" onclick="closeM('mo-fixture')">Cancel</button>
