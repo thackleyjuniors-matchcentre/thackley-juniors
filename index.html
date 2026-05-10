@@ -1346,12 +1346,13 @@ function careerStats(profile,matches){
   const name=fname(profile);
   let apps=0,goals=0,assists=0,saves=0,captainCount=0;
   (matches||[]).forEach(m=>{
-    const app=m.events?.some(e=>e.playerName===name||e.extra?.assist===name);
+    const app=m.events?.some(e=>e.playerName===name||(e.type==='goal'&&e.extra?.assist===name));
     if(app)apps++;
     if(m.match?.captain===name) captainCount++;
     m.events?.forEach(e=>{
       if(e.playerName===name){if(e.type==='goal')goals++;if(e.type==='save')saves++;}
-      if(e.extra?.assist===name)assists++;
+      // Only count assist if it's on a goal event and assist field is not empty
+      if((e.type==='goal'||e.type==='corner')&&e.extra?.assist&&e.extra.assist===name)assists++;
     });
   });
   return{apps,goals,assists,saves,captainCount};
