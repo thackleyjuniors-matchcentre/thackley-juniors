@@ -1799,16 +1799,38 @@ function posAnalysis(profile,matches){
   return Object.entries(cnt).map(([pos,c])=>{const pct=Math.round(c/total*100);return`<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;"><span>${pos}</span><span style="color:${cols[pos]}">${c} qtrs (${pct}%)</span></div><div style="height:5px;background:#eee;border-radius:3px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${cols[pos]};border-radius:3px;"></div></div></div>`;}).join('');
 }
 
-function openPlayerStats(id){
+async function openPlayerStats(id){
   const p = getProf().find(x=>x.id===id);
   if(!p){ openProfileEditor(id); return; }
   const matches = getMatchesForSeason(_activeSeason);
   const name = (p.firstName+' '+p.lastName).trim();
 
+  // ── Load all ratings from DB ──────────────────────────────────────────
+  let allDbRatings = [];
+  try{ allDbRatings = await window._db.list('ratings'); }catch(e){}
+
+  // Helper: get avg player rating from ratings for a specific matchId
+  function getMatchRating(matchId){
+    const matchRatings = allDbRatings.filter(r=>
+      r.coach && r.ratings && (String(r.id||'').startsWith(matchId) || r.matchId===matchId)
+    );
+    if(!matchRatings.length) return null;
+    const playerScores = [];
+    matchRatings.forEach(r=>{
+      const playerRating = r.ratings[name];
+      if(!playerRating) return;
+      const vals = RATING_CATS.map(c=>playerRating[c.key]).filter(v=>v!=null&&v>0);
+      if(vals.length) playerScores.push(vals.reduce((a,b)=>a+b,0)/vals.length);
+    });
+    if(!playerScores.length) return null;
+    return (playerScores.reduce((a,b)=>a+b,0)/playerScores.length).toFixed(1);
+  }
+
   // ── Season totals ─────────────────────────────────────────────────────
   let apps=0,goals=0,assists=0,saves=0,shotsOn=0,shotsOff=0;
   let tackles=0,clearances=0,corners=0,yellows=0,reds=0;
   const matchBreakdown = [];
+  const seasonRatings = [];
 
   matches.forEach(m=>{
     const pl = (m.players||[]).find(x=>(x.firstName+' '+x.lastName).trim()===name);
@@ -1827,8 +1849,30 @@ function openPlayerStats(id){
     corners   += s.corners||0;
     yellows   += s.yellows||0;
     reds      += s.reds||0;
-    matchBreakdown.push({m, s, played});
+    const matchRating = getMatchRating(m.id);
+    if(matchRating) seasonRatings.push(parseFloat(matchRating));
+    matchBreakdown.push({m, s, played, rating: matchRating});
   });
+
+  // Season average rating
+  const seasonAvgRating = seasonRatings.length
+    ? (seasonRatings.reduce((a,b)=>a+b,0)/seasonRatings.length).toFixed(1)
+    : null;
+
+  // Rating colour helper
+  const ratingCol = r => {
+    const n = parseFloat(r);
+    if(n>=8) return '#1a7a1a';
+    if(n>=6) return '#a07800';
+    return '#aa0000';
+  };
+
+  const ratingBadge = (r, size=28) => r
+    ? `<div style="background:rgba(0,0,0,0.06);border-radius:8px;padding:6px 10px;text-align:center;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:${size}px;color:${ratingCol(r)};line-height:1;">${r}</div>
+        <div style="font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Rating</div>
+       </div>`
+    : '';
 
   // ── Stat tile builder ─────────────────────────────────────────────────
   const tile = (icon, val, label, col='var(--red)') =>
@@ -1839,30 +1883,33 @@ function openPlayerStats(id){
     </div>`;
 
   const initials = (p.firstName?.[0]||'')+(p.lastName?.[0]||'');
-  const pos = posAnalysis(p, matches)||'';
 
   // ── Match breakdown rows ──────────────────────────────────────────────
-  const matchRows = matchBreakdown.length ? matchBreakdown.map(({m,s})=>{
+  const matchRows = matchBreakdown.length ? matchBreakdown.map(({m,s,rating})=>{
     const chips = [];
-    if(s.goals)     chips.push(`<span style="background:rgba(204,0,0,.1);color:#aa0000;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">⚽ ${s.goals}</span>`);
-    if(s.assists)   chips.push(`<span style="background:rgba(245,197,24,.15);color:#a07800;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🅰️ ${s.assists}</span>`);
-    if(s.saves)     chips.push(`<span style="background:rgba(245,197,24,.12);color:#a07800;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🧤 ${s.saves}</span>`);
-    if(s.shotsOn)   chips.push(`<span style="background:rgba(204,0,0,.08);color:#aa0000;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🎯 ${s.shotsOn}</span>`);
-    if(s.shotsOff)  chips.push(`<span style="background:rgba(0,0,0,.06);color:#555;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">↗️ ${s.shotsOff}</span>`);
-    if(s.tacklesW)  chips.push(`<span style="background:rgba(41,121,255,.1);color:#1a5fd4;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">💪 ${s.tacklesW}</span>`);
-    if(s.clearancesG) chips.push(`<span style="background:rgba(41,121,255,.08);color:#1a5fd4;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">👟 ${s.clearancesG}</span>`);
-    if(s.corners)   chips.push(`<span style="background:rgba(208,96,0,.1);color:#c05800;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🚩 ${s.corners}</span>`);
-    if(s.yellows)   chips.push(`<span style="background:rgba(245,197,24,.2);color:#a07800;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🟡 ${s.yellows}</span>`);
-    if(s.reds)      chips.push(`<span style="background:rgba(204,0,0,.12);color:#aa0000;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🔴 ${s.reds}</span>`);
+    if(s.goals)      chips.push(`<span style="background:rgba(204,0,0,.1);color:#aa0000;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">⚽ ${s.goals}</span>`);
+    if(s.assists)    chips.push(`<span style="background:rgba(245,197,24,.15);color:#a07800;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🅰️ ${s.assists}</span>`);
+    if(s.saves)      chips.push(`<span style="background:rgba(245,197,24,.12);color:#a07800;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🧤 ${s.saves}</span>`);
+    if(s.shotsOn)    chips.push(`<span style="background:rgba(204,0,0,.08);color:#aa0000;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🎯 ${s.shotsOn}</span>`);
+    if(s.shotsOff)   chips.push(`<span style="background:rgba(0,0,0,.06);color:#555;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">↗️ ${s.shotsOff}</span>`);
+    if(s.tacklesW)   chips.push(`<span style="background:rgba(41,121,255,.1);color:#1a5fd4;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">💪 ${s.tacklesW}</span>`);
+    if(s.clearancesG)chips.push(`<span style="background:rgba(41,121,255,.08);color:#1a5fd4;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">👟 ${s.clearancesG}</span>`);
+    if(s.corners)    chips.push(`<span style="background:rgba(208,96,0,.1);color:#c05800;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🚩 ${s.corners}</span>`);
+    if(s.yellows)    chips.push(`<span style="background:rgba(245,197,24,.2);color:#a07800;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🟡 ${s.yellows}</span>`);
+    if(s.reds)       chips.push(`<span style="background:rgba(204,0,0,.12);color:#aa0000;font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;">🔴 ${s.reds}</span>`);
     const h=m.score?.home||0, a=m.score?.away||0;
     const resCol=h>a?'#1a7a1a':h===a?'#a07800':'#aa0000';
     return`<div style="background:#f7f7f9;border-radius:10px;padding:12px 14px;margin-bottom:8px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;">
+        <div style="flex:1;min-width:0;">
           <div style="font-weight:700;font-size:13px;">vs ${m.match?.opp||'Unknown'}</div>
           <div style="font-size:10px;color:var(--muted);">${m.match?.date||''} · ${m.match?.gtype||''}</div>
         </div>
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:${resCol};">${h} — ${a}</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:${resCol};flex-shrink:0;">${h} — ${a}</div>
+        ${rating ? `<div style="background:#fff;border-radius:8px;padding:5px 10px;text-align:center;flex-shrink:0;border:1.5px solid rgba(0,0,0,0.07);">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;color:${ratingCol(rating)};line-height:1;">${rating}</div>
+          <div style="font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Rating</div>
+        </div>` : ''}
       </div>
       ${chips.length
         ? `<div style="display:flex;flex-wrap:wrap;gap:5px;">${chips.join('')}</div>`
@@ -1876,37 +1923,38 @@ function openPlayerStats(id){
       <div style="width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:22px;color:#fff;flex-shrink:0;border:2px solid rgba(255,255,255,0.25);">${initials}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px;color:#fff;line-height:1;">${p.firstName} ${p.lastName}</div>
-        <div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:3px;">
-          #${p.number||'—'} · ${_activeSeason}
-          ${p.foot?' · '+p.foot+' foot':''}
-        </div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.7);margin-top:3px;">#${p.number||'—'} · ${_activeSeason}${p.foot?' · '+p.foot+' foot':''}</div>
       </div>
+      ${seasonAvgRating ? `<div style="background:rgba(255,255,255,0.15);border-radius:10px;padding:10px 14px;text-align:center;flex-shrink:0;border:1.5px solid rgba(255,255,255,0.25);">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:#fff;line-height:1;">${seasonAvgRating}</div>
+        <div style="font-size:8px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:.8px;margin-top:3px;">Season Avg</div>
+      </div>` : ''}
     </div>
 
     <!-- SEASON STAT TILES -->
     <div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:var(--red);margin-bottom:10px;">Season Stats — ${_activeSeason}</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:20px;">
-      ${tile('🏟️', apps,   'Apps')}
-      ${tile('⚽', goals,  'Goals')}
-      ${tile('🅰️', assists,'Assists')}
-      ${tile('🧤', saves,  'GK Saves','#a07800')}
-      ${tile('🎯', shotsOn,'On Target')}
+      ${tile('🏟️', apps,    'Apps')}
+      ${tile('⚽', goals,   'Goals')}
+      ${tile('🅰️', assists, 'Assists')}
+      ${tile('🧤', saves,   'GK Saves','#a07800')}
+      ${tile('🎯', shotsOn, 'On Target')}
       ${tile('↗️', shotsOff,'Off Target','#555')}
-      ${tile('💪', tackles,  'Tackles','#1a5fd4')}
+      ${tile('💪', tackles,   'Tackles','#1a5fd4')}
       ${tile('👟', clearances,'Clearances','#1a5fd4')}
-      ${tile('🚩', corners, 'Corners','#c05800')}
+      ${tile('🚩', corners,  'Corners','#c05800')}
       ${yellows||reds ? tile('🟡', yellows,'Yellows','#a07800') : ''}
-      ${yellows||reds ? tile('🔴', reds,   'Reds',   '#aa0000') : ''}
+      ${yellows||reds ? tile('🔴', reds,   'Reds','#aa0000') : ''}
     </div>
 
     <!-- MATCH BY MATCH -->
     <div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:var(--red);margin-bottom:10px;">Match by Match</div>
     ${matchRows}`;
 
-  // Wire up edit button
   document.getElementById('pstats-edit-btn').onclick = ()=>{ closeM('mo-player-stats'); openProfileEditor(id); };
   document.getElementById('mo-player-stats').classList.add('open');
 }
+
 
 function openProfileEditor(id){
   const profs=getProf(); const p=id?profs.find(x=>x.id===id):null;
