@@ -1282,17 +1282,20 @@ function nextQtr(){
 
 function openQtrModal(){
   const q=pendingQ;
-  document.getElementById('mqt').textContent='Quarter '+q+' — Positions';
-  document.getElementById('mqd').textContent='Pre-set positions loaded for Q'+q+'. Adjust if needed, then start.';
+  const pLabel=G._periodLabel||'Quarter';
+  document.getElementById('mqt').textContent=pLabel+' '+q+' — Positions';
+  document.getElementById('mqd').textContent='Pre-set positions loaded for '+pLabel+' '+q+'. Adjust if needed, then start.';
   document.getElementById('mq-pos').innerHTML=G.players.map((p,i)=>{
-    const prev=p.posQ[q-2]||'SUB';
+    // Use the pre-set position for THIS quarter (posQ[q-1])
+    // Fall back to previous quarter if not set, then SUB
+    const preset=p.posQ[q-1]||p.posQ[q-2]||'SUB';
     return`<div class="ppr"><div class="ppn">${p.number}</div><div class="ppname">${fname(p)}</div>
       <select class="ppsel" id="mqp-${i}">
-        <option value="GK" ${prev==='GK'?'selected':''}>GK</option>
-        <option value="DEF" ${prev==='DEF'?'selected':''}>DEF</option>
-        <option value="MID" ${prev==='MID'?'selected':''}>MID</option>
-        <option value="FWD" ${prev==='FWD'?'selected':''}>FWD</option>
-        <option value="SUB" ${prev==='SUB'?'selected':''}>SUB</option>
+        <option value="GK" ${preset==='GK'?'selected':''}>GK</option>
+        <option value="DEF" ${preset==='DEF'?'selected':''}>DEF</option>
+        <option value="MID" ${preset==='MID'?'selected':''}>MID</option>
+        <option value="FWD" ${preset==='FWD'?'selected':''}>FWD</option>
+        <option value="SUB" ${preset==='SUB'?'selected':''}>SUB</option>
       </select></div>`;
   }).join('');
   document.getElementById('mo-qtr').classList.add('open');
@@ -1307,7 +1310,7 @@ function confirmQtr(){
   document.getElementById('tdisp').classList.remove('paused');
   setBadge((G._periodLabel||'Q')+q,'');
   document.getElementById('qp'+q)?.classList.add('active');
-  pushEv({type:'sys',subtype:'qtr',time:'00:00',sec:0,quarter:q,playerName:'',extra:{},icon:'>',desc:'Quarter '+q+' started'});
+  pushEv({type:'sys',subtype:'qtr',time:'00:00',sec:0,quarter:q,playerName:'',extra:{},icon:'>',desc:(G._periodLabel||'Quarter')+' '+q+' started'});
   updPitch(); closeM('mo-qtr'); showToast((G._periodLabel||'Q')+q+' started!');
 }
 
