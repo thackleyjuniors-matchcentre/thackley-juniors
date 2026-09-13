@@ -534,8 +534,30 @@ textarea{resize:vertical;min-height:80px;}
 
 <!-- STATS -->
 <div class="view" id="view-stats">
-  <div class="sh"><div class="st">Player Stats — This Match</div></div>
-  <div class="sq-grid" id="sq-grid"><div class="empty"><div class="empty-ico">📊</div>Start a match to see stats</div></div>
+  <div class="sh">
+    <div class="st">Stats — <span id="stats-season-label">2026/27</span></div>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <span style="font-size:11px;color:var(--muted);">Sort:</span>
+      <select id="stats-sort" onchange="renderSeasonStats()" style="width:auto;padding:5px 10px;font-size:11px;">
+        <option value="goals">Goals</option>
+        <option value="apps">Apps</option>
+        <option value="assists">Assists</option>
+        <option value="saves">Saves</option>
+        <option value="tackles">Tackles</option>
+        <option value="name">Name</option>
+      </select>
+    </div>
+  </div>
+  <div id="season-stats-list">
+    <div class="empty"><div class="empty-ico">📊</div>No saved matches yet — stats will appear here after results are saved.</div>
+  </div>
+  <div id="stats-breakdown" style="display:none;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <button class="btn btn-ghost btn-sm" onclick="closeStatsBreakdown()">← Back</button>
+      <div class="st" id="breakdown-title">Player Breakdown</div>
+    </div>
+    <div id="breakdown-body"></div>
+  </div>
 </div>
 
 <!-- REVIEW -->
