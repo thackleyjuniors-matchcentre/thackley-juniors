@@ -1860,30 +1860,124 @@ async function renderSaved(){
 
 function showReport(id){
   const m=getSaved().find(x=>x.id===id); if(!m)return;
-  const C=(ic,v,col,bg)=>v?`<span class="chip" style="background:${bg};color:${col};">${ic}${v}</span>`:'';
-  const pRows=(m.players||[]).map(p=>{const s=p.stats||{};return`<div class="rrow">
-    <span>#${p.number} ${p.firstName} ${p.lastName}</span>
-    <span style="display:flex;gap:3px;flex-wrap:wrap;">
-      ${C('[G]',s.goals,'var(--red)','rgba(204,0,0,.1)')}${C('🅰',s.assists,'#a07800','rgba(245,197,24,.15)')}
-      ${C('[S]',s.saves,'#a07800','rgba(245,197,24,.1)')}${C('🎯',s.shotsOn,'var(--red)','rgba(204,0,0,.08)')}
-      ${C('💪',s.tacklesW,'#1a5fd4','rgba(41,121,255,.1)')}${C('👟',s.clearancesG,'#1a5fd4','rgba(41,121,255,.08)')}
-      ${C('🚩',s.corners,'#e05c00','rgba(224,92,0,.1)')}${C('🟡',s.yellows,'#a07800','rgba(245,197,24,.15)')}
-      ${C('🔴',s.reds,'var(--red)','rgba(204,0,0,.1)')}
-      ${!s.goals&&!s.assists&&!s.saves&&!s.shotsOn&&!s.tacklesW&&!s.clearancesG&&!s.corners&&!s.yellows&&!s.reds?'<span style="color:var(--muted);font-size:10px;">—</span>':''}
+
+  // ── Aggregate team stats from all players ────────────────────────────
+  let totShotsOn=0,totShotsOff=0,totShotsBlk=0,totGoals=0,totAssists=0;
+  let totSaves=0,totTackles=0,totClearances=0,totCorners=0,totYellows=0,totReds=0;
+  let totGoalsAg=0,totFKWon=0,totPenGoals=0,totPenMisses=0;
+  (m.players||[]).forEach(p=>{
+    const s=p.stats||{};
+    totShotsOn+=(s.shotsOn||0); totShotsOff+=(s.shotsOff||0); totShotsBlk+=(s.shotsBlk||0);
+    totGoals+=(s.goals||0); totAssists+=(s.assists||0); totSaves+=(s.saves||0);
+    totTackles+=(s.tacklesW||0); totClearances+=(s.clearancesG||0); totCorners+=(s.corners||0);
+    totYellows+=(s.yellows||0); totReds+=(s.reds||0);
+    totFKWon+=(s.fkWon||0); totPenGoals+=(s.penGoals||0); totPenMisses+=(s.penMisses||0);
+  });
+  // Count goals against from events
+  totGoalsAg=(m.events||[]).filter(e=>e.type==='goal-ag'||e.subtype==='conceded').length;
+  const totShots=totShotsOn+totShotsOff+totShotsBlk;
+  const shotAcc=totShots>0?Math.round((totShotsOn/totShots)*100):0;
+
+  // ── Result label ─────────────────────────────────────────────────────
+  const h=m.score?.home||0, a=m.score?.away||0;
+  const resultLabel=h>a?'WIN':h===a?'DRAW':'LOSS';
+  const resultCol=h>a?'#1a7a1a':h===a?'#a07800':'#cc0000';
+  const resultBg=h>a?'rgba(26,122,26,.1)':h===a?'rgba(160,120,0,.1)':'rgba(204,0,0,.1)';
+
+  // ── Match stats bar builder ───────────────────────────────────────────
+  const statBar=(label,val,max,col='var(--red)')=>{
+    const pct=max>0?Math.min(100,Math.round((val/max)*100)):0;
+    return`<div style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-bottom:4px;">
+        <span>${label}</span><span style="color:${col};font-family:'Bebas Neue',sans-serif;font-size:16px;">${val}</span>
+      </div>
+      <div style="background:#f0f0f0;border-radius:4px;height:6px;overflow:hidden;">
+        <div style="background:${col};height:100%;width:${pct}%;border-radius:4px;transition:width .6s ease;"></div>
+      </div>
+    </div>`;
+  };
+
+  // ── Player stats chips ────────────────────────────────────────────────
+  const C=(ic,v,col,bg)=>v?`<span class="chip" style="background:${bg};color:${col};">${ic} ${v}</span>`:'';
+  const pRows=(m.players||[]).filter(p=>{
+    const s=p.stats||{};
+    return s.goals||s.assists||s.saves||s.shotsOn||s.shotsOff||s.tacklesW||s.clearancesG||s.corners||s.yellows||s.reds;
+  }).map(p=>{const s=p.stats||{};return`<div class="rrow">
+    <span style="font-weight:700;">#${p.number} ${p.firstName} ${p.lastName}</span>
+    <span style="display:flex;gap:4px;flex-wrap:wrap;">
+      ${C('⚽',s.goals,'#aa0000','rgba(204,0,0,.1)')}${C('🅰',s.assists,'#a07800','rgba(245,197,24,.15)')}
+      ${C('🧤',s.saves,'#a07800','rgba(245,197,24,.1)')}${C('🎯',s.shotsOn,'#aa0000','rgba(204,0,0,.08)')}
+      ${C('↗️',s.shotsOff,'#555','rgba(0,0,0,.06)')}${C('💪',s.tacklesW,'#1a5fd4','rgba(41,121,255,.1)')}
+      ${C('👟',s.clearancesG,'#1a5fd4','rgba(41,121,255,.08)')}${C('🚩',s.corners,'#d06000','rgba(224,92,0,.1)')}
+      ${C('🟡',s.yellows,'#a07800','rgba(245,197,24,.18)')}${C('🔴',s.reds,'#aa0000','rgba(204,0,0,.12)')}
     </span></div>`;}).join('');
+
+  // ── Timeline ─────────────────────────────────────────────────────────
   const tl=[...(m.events||[])].reverse().filter(e=>e.desc).map(e=>`<div class="rrow">
     <span style="display:flex;align-items:center;gap:7px;">
-      <span style="font-family:Bebas Neue,sans-serif;color:var(--red);font-size:14px;">${e.time}</span>
-      <span>${e.icon}</span><span>${e.desc}</span></span>
-    <span style="font-size:9px;color:var(--muted);">Q${e.quarter}</span></div>`).join('');
+      <span style="font-family:'Bebas Neue',sans-serif;color:var(--red);font-size:14px;min-width:38px;">${e.time}</span>
+      <span>${e.icon||''}</span><span style="font-size:12px;">${e.desc}</span>
+    </span>
+    <span style="font-size:9px;color:var(--muted);background:rgba(204,0,0,0.07);padding:2px 6px;border-radius:5px;">Q${e.quarter}</span>
+  </div>`).join('');
+
   document.getElementById('report-body').innerHTML=`
-    <div class="rsec"><div style="text-align:center;padding:12px 0;">
-      <div style="font-family:Bebas Neue,sans-serif;font-size:50px;color:var(--red);letter-spacing:4px;">${m.score?.home||0} — ${m.score?.away||0}</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:3px;">Thackley Juniors vs ${m.match?.opp||'Opponent'}</div>
-      <div style="font-size:11px;color:var(--muted);">${m.match?.date||''} ${m.match?.gtype?'· '+m.match.gtype:''} ${m.match?.comp?'· '+m.match.comp:''}</div>
-    </div></div>
-    <div class="rsec"><h3>Player Stats</h3>${pRows||'<div style="color:var(--muted)">No stats</div>'}</div>
-    <div class="rsec"><h3>Timeline</h3>${tl||'<div style="color:var(--muted);font-size:12px;">No events</div>'}</div>`;
+    <!-- HERO SCORE -->
+    <div style="background:linear-gradient(135deg,var(--red),#880000);border-radius:14px;padding:22px 16px;text-align:center;margin-bottom:16px;position:relative;overflow:hidden;">
+      <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:radial-gradient(circle,rgba(255,255,255,0.1),transparent 70%);"></div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:rgba(255,255,255,0.65);text-transform:uppercase;margin-bottom:6px;">
+        ${m.match?.date||''} ${m.match?.comp?'· '+m.match.comp:''}
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:8px;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;color:rgba(255,255,255,0.8);">Thackley</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:64px;color:#fff;letter-spacing:6px;line-height:1;text-shadow:0 3px 12px rgba(0,0,0,0.2);">${h} <span style="opacity:.4;font-size:40px;">—</span> ${a}</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;color:rgba(255,255,255,0.8);">${m.match?.opp||'Opponent'}</div>
+      </div>
+      <span style="display:inline-block;background:${resultBg};color:${resultCol};border:1.5px solid ${resultCol};font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;padding:4px 18px;border-radius:20px;">
+        ${resultLabel}
+      </span>
+      <div style="font-size:10px;color:rgba(255,255,255,0.55);margin-top:8px;">${m.match?.gtype||''} ${m.match?.venue?'· '+m.match.venue:''}</div>
+    </div>
+
+    <!-- MATCH STATS (TV-STYLE) -->
+    <div style="background:#fff;border-radius:12px;padding:18px;margin-bottom:14px;box-shadow:var(--shadow-sm);">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:var(--red);margin-bottom:14px;">Match Stats</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div style="background:#f8f8f8;border-radius:10px;padding:14px;text-align:center;">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:42px;color:var(--red);line-height:1;">${totShotsOn}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:2px;">Shots on Target</div>
+        </div>
+        <div style="background:#f8f8f8;border-radius:10px;padding:14px;text-align:center;">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:42px;color:#555;line-height:1;">${totShotsOff}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:2px;">Shots off Target</div>
+        </div>
+      </div>
+      ${statBar('Total Shots', totShots, Math.max(totShots,15))}
+      ${statBar('Shot Accuracy', shotAcc, 100, shotAcc>=50?'#1a7a1a':'var(--red)')}
+      ${statBar('Goals', totGoals, Math.max(totGoals,6), 'var(--red)')}
+      ${totGoalsAg?statBar('Goals Conceded', totGoalsAg, Math.max(totGoalsAg,6), '#880000'):''}
+      ${statBar('Tackles Won', totTackles, Math.max(totTackles,20), '#1a5fd4')}
+      ${statBar('Clearances', totClearances, Math.max(totClearances,20), '#1a5fd4')}
+      ${totCorners?statBar('Corners', totCorners, Math.max(totCorners,10), '#d06000'):''}
+      ${totSaves?statBar('GK Saves', totSaves, Math.max(totSaves,10), '#a07800'):''}
+      ${totYellows||totReds?`<div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(0,0,0,.05);">
+        ${totYellows?`<span style="background:rgba(245,197,24,.2);color:#a07800;font-weight:700;font-size:11px;padding:4px 12px;border-radius:10px;">🟡 ${totYellows} Yellow${totYellows!==1?'s':''}</span>`:''}
+        ${totReds?`<span style="background:rgba(204,0,0,.12);color:#aa0000;font-weight:700;font-size:11px;padding:4px 12px;border-radius:10px;">🔴 ${totReds} Red${totReds!==1?'s':''}</span>`:''}
+      </div>`:''}
+    </div>
+
+    <!-- PLAYER STATS -->
+    <div style="background:#fff;border-radius:12px;padding:18px;margin-bottom:14px;box-shadow:var(--shadow-sm);">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:var(--red);margin-bottom:12px;">Player Contributions</div>
+      ${pRows||'<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px 0;">No individual stats recorded</div>'}
+    </div>
+
+    <!-- TIMELINE -->
+    <div style="background:#fff;border-radius:12px;padding:18px;box-shadow:var(--shadow-sm);">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:var(--red);margin-bottom:12px;">Match Timeline</div>
+      ${tl||'<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px 0;">No events recorded</div>'}
+    </div>`;
+
   document.getElementById('rep-del').onclick=async()=>{
     if(!confirm('Delete this match?'))return;
     try{await window._db.del('matches',String(id));_cachedMatches=_cachedMatches.filter(x=>x.id!==id);closeM('mo-report');renderSaved();showToast('Match deleted');}
