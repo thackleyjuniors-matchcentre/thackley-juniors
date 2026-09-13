@@ -657,7 +657,21 @@ textarea{resize:vertical;min-height:80px;}
     <div id="report-body"></div>
     <div class="mfooter">
       <button class="btn btn-ghost" onclick="closeM('mo-report')">Close</button>
+      <button class="btn btn-ghost btn-sm" id="rep-edit" onclick="openEditStats()">✏️ Edit Stats</button>
       <button class="btn btn-red btn-sm" id="rep-del">🗑️ Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT STATS MODAL -->
+<div class="mo" id="mo-edit-stats">
+  <div class="modal modal-lg">
+    <div class="modal-title">✏️ Edit Match Stats</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Adjust any player's stats. Changes save back to the match record.</p>
+    <div id="edit-stats-body"></div>
+    <div class="mfooter">
+      <button class="btn btn-ghost" onclick="closeM('mo-edit-stats')">Cancel</button>
+      <button class="btn btn-red" onclick="saveEditedStats()">💾 Save Changes</button>
     </div>
   </div>
 </div>
@@ -1953,7 +1967,7 @@ function showReport(id){
         </div>
       </div>
       ${statBar('Total Shots', totShots, Math.max(totShots,15))}
-      ${statBar('Shot Accuracy', shotAcc, 100, shotAcc>=50?'#1a7a1a':'var(--red)')}
+      ${statBar('Shot Accuracy %', shotAcc, 100, shotAcc>=50?'#1a7a1a':'var(--red)')}
       ${statBar('Goals', totGoals, Math.max(totGoals,6), 'var(--red)')}
       ${totGoalsAg?statBar('Goals Conceded', totGoalsAg, Math.max(totGoalsAg,6), '#880000'):''}
       ${statBar('Tackles Won', totTackles, Math.max(totTackles,20), '#1a5fd4')}
@@ -1978,6 +1992,7 @@ function showReport(id){
       ${tl||'<div style="color:var(--muted);font-size:12px;text-align:center;padding:12px 0;">No events recorded</div>'}
     </div>`;
 
+  _editMatchId = id;
   document.getElementById('rep-del').onclick=async()=>{
     if(!confirm('Delete this match?'))return;
     try{await window._db.del('matches',String(id));_cachedMatches=_cachedMatches.filter(x=>x.id!==id);closeM('mo-report');renderSaved();showToast('Match deleted');}
@@ -2620,6 +2635,84 @@ function submitShotOn(){
   updLiveStrip();
   checkHandicap();
   closeM('mo-shot-on');
+}
+
+// ═══ EDIT MATCH STATS ═══
+let _editMatchId = null;
+
+function openEditStats(){
+  const m = getSaved().find(x=>x.id===_editMatchId);
+  if(!m){ showToast('No match loaded','warn'); return; }
+
+  const STATS = [
+    {key:'goals',    label:'Goals',          icon:'⚽'},
+    {key:'assists',  label:'Assists',         icon:'🅰️'},
+    {key:'saves',    label:'GK Saves',        icon:'🧤'},
+    {key:'shotsOn',  label:'Shots on Target', icon:'🎯'},
+    {key:'shotsOff', label:'Shots off Target',icon:'↗️'},
+    {key:'shotsBlk', label:'Shots Blocked',   icon:'🛡️'},
+    {key:'tacklesW', label:'Tackles Won',     icon:'💪'},
+    {key:'clearancesG',label:'Clearances',   icon:'👟'},
+    {key:'corners',  label:'Corners',         icon:'🚩'},
+    {key:'yellows',  label:'Yellow Cards',    icon:'🟡'},
+    {key:'reds',     label:'Red Cards',       icon:'🔴'},
+  ];
+
+  const rows = (m.players||[]).map((p,pi)=>{
+    const s = p.stats||{};
+    const statInputs = STATS.map(st=>`
+      <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+        <span style="font-size:14px;">${st.icon}</span>
+        <input type="number" min="0" max="99"
+          id="es-${pi}-${st.key}"
+          value="${s[st.key]||0}"
+          style="width:46px;text-align:center;padding:6px 4px;font-size:13px;font-weight:700;">
+        <span style="font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:center;max-width:46px;line-height:1.2;">${st.label}</span>
+      </div>`).join('');
+    return`<div style="background:#f8f8f8;border-radius:10px;padding:14px;margin-bottom:10px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:var(--text);">
+        <span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--red);margin-right:6px;">#${p.number}</span>
+        ${p.firstName} ${p.lastName}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">${statInputs}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('edit-stats-body').innerHTML = rows ||
+    '<div style="color:var(--muted);text-align:center;padding:20px;">No players in this match</div>';
+
+  closeM('mo-report');
+  document.getElementById('mo-edit-stats').classList.add('open');
+}
+
+async function saveEditedStats(){
+  const m = getSaved().find(x=>x.id===_editMatchId);
+  if(!m){ showToast('Match not found','warn'); return; }
+
+  const STAT_KEYS = ['goals','assists','saves','shotsOn','shotsOff','shotsBlk',
+                     'tacklesW','clearancesG','corners','yellows','reds'];
+
+  // Update player stats from inputs
+  (m.players||[]).forEach((p,pi)=>{
+    const s = p.stats||{};
+    STAT_KEYS.forEach(key=>{
+      const inp = document.getElementById('es-'+pi+'-'+key);
+      if(inp) s[key] = parseInt(inp.value)||0;
+    });
+    p.stats = s;
+  });
+
+  // Save back to Firebase
+  try{
+    await window._db.set('matches', _editMatchId, m);
+    const idx = _cachedMatches.findIndex(x=>x.id===_editMatchId);
+    if(idx>=0) _cachedMatches[idx] = m;
+    closeM('mo-edit-stats');
+    showReport(_editMatchId); // Reopen with updated stats
+    showToast('Stats updated!');
+  }catch(e){
+    showToast('Error saving: '+e.message,'warn');
+  }
 }
 
 // ═══ SEASON MANAGEMENT ═══
