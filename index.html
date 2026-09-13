@@ -1888,7 +1888,8 @@ function showReport(id){
     totFKWon+=(s.fkWon||0); totPenGoals+=(s.penGoals||0); totPenMisses+=(s.penMisses||0);
   });
   // Count goals against from events
-  totGoalsAg=(m.events||[]).filter(e=>e.type==='goal-ag'||e.subtype==='conceded').length;
+  totGoalsAg=(m.score?.away)||((m.events||[]).filter(e=>e.type==='goal-ag'||e.subtype==='conceded').length);
+  const oppStats=m.oppStats||{};
   const totShots=totShotsOn+totShotsOff+totShotsBlk;
   const shotAcc=totShots>0?Math.round((totShotsOn/totShots)*100):0;
 
@@ -1942,16 +1943,45 @@ function showReport(id){
       <div style="font-size:11px;font-weight:700;letter-spacing:2px;color:rgba(255,255,255,0.65);text-transform:uppercase;margin-bottom:6px;">
         ${m.match?.date||''} ${m.match?.comp?'· '+m.match.comp:''}
       </div>
-      <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:8px;">
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;color:rgba(255,255,255,0.8);">Thackley</div>
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:64px;color:#fff;letter-spacing:6px;line-height:1;text-shadow:0 3px 12px rgba(0,0,0,0.2);">${h} <span style="opacity:.4;font-size:40px;">—</span> ${a}</div>
-        <div style="font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:2px;color:rgba(255,255,255,0.8);">${m.match?.opp||'Opponent'}</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;flex-wrap:nowrap;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:2px;color:rgba(255,255,255,0.8);text-align:center;max-width:80px;line-height:1.2;">Thackley</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:72px;color:#fff;line-height:1;text-shadow:0 3px 12px rgba(0,0,0,0.2);">${h}</span>
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:40px;color:rgba(255,255,255,0.35);line-height:1;">—</span>
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:72px;color:rgba(255,255,255,0.65);line-height:1;text-shadow:0 3px 12px rgba(0,0,0,0.2);">${a}</span>
+        </div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:2px;color:rgba(255,255,255,0.8);text-align:center;max-width:80px;line-height:1.2;">${m.match?.opp||'Opponent'}</div>
       </div>
       <span style="display:inline-block;background:${resultBg};color:${resultCol};border:1.5px solid ${resultCol};font-family:'Bebas Neue',sans-serif;font-size:14px;letter-spacing:2px;padding:4px 18px;border-radius:20px;">
         ${resultLabel}
       </span>
       <div style="font-size:10px;color:rgba(255,255,255,0.55);margin-top:8px;">${m.match?.gtype||''} ${m.match?.venue?'· '+m.match.venue:''}</div>
     </div>
+
+    <!-- GOALS & ASSISTS SUMMARY -->
+    ${(()=>{
+      // Pull all goal events from timeline
+      const goalEvents=(m.events||[]).filter(e=>e.type==='goal'||e.type==='freekick'&&e.extra?.result==='goal');
+      if(!goalEvents.length) return '';
+      const goalRows=goalEvents.map(e=>{
+        const assist=e.extra?.assist;
+        return`<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.05);">
+          <span style="font-size:20px;">⚽</span>
+          <div style="flex:1;">
+            <div style="font-weight:700;font-size:13px;">${e.playerName||'Unknown'}</div>
+            ${assist?`<div style="font-size:11px;color:var(--muted);">🅰️ Assist: ${assist}</div>`:'<div style="font-size:11px;color:var(--muted);">No assist recorded</div>'}
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:'Bebas Neue',sans-serif;font-size:14px;color:var(--red);">${e.time||''}</div>
+            <div style="font-size:9px;color:var(--muted);">Q${e.quarter||1}</div>
+          </div>
+        </div>`;
+      }).join('');
+      return`<div style="background:#fff;border-radius:12px;padding:18px;margin-bottom:14px;box-shadow:var(--shadow-sm);">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:var(--red);margin-bottom:12px;">Goals & Assists</div>
+        ${goalRows}
+      </div>`;
+    })()}
 
     <!-- MATCH STATS (TV-STYLE) -->
     <div style="background:#fff;border-radius:12px;padding:18px;margin-bottom:14px;box-shadow:var(--shadow-sm);">
@@ -1970,6 +2000,9 @@ function showReport(id){
       ${statBar('Shot Accuracy %', shotAcc, 100, shotAcc>=50?'#1a7a1a':'var(--red)')}
       ${statBar('Goals', totGoals, Math.max(totGoals,6), 'var(--red)')}
       ${totGoalsAg?statBar('Goals Conceded', totGoalsAg, Math.max(totGoalsAg,6), '#880000'):''}
+      ${oppStats.shotsOn?statBar('Opp Shots on Target', oppStats.shotsOn, Math.max(oppStats.shotsOn,10), '#555'):''}
+      ${oppStats.shots?statBar('Opp Total Shots', oppStats.shots, Math.max(oppStats.shots,15), '#888'):''}
+      ${oppStats.corners?statBar('Opp Corners', oppStats.corners, Math.max(oppStats.corners,10), '#888'):''}
       ${statBar('Tackles Won', totTackles, Math.max(totTackles,20), '#1a5fd4')}
       ${statBar('Clearances', totClearances, Math.max(totClearances,20), '#1a5fd4')}
       ${totCorners?statBar('Corners', totCorners, Math.max(totCorners,10), '#d06000'):''}
@@ -2645,41 +2678,80 @@ function openEditStats(){
   if(!m){ showToast('No match loaded','warn'); return; }
 
   const STATS = [
-    {key:'goals',    label:'Goals',          icon:'⚽'},
-    {key:'assists',  label:'Assists',         icon:'🅰️'},
-    {key:'saves',    label:'GK Saves',        icon:'🧤'},
-    {key:'shotsOn',  label:'Shots on Target', icon:'🎯'},
-    {key:'shotsOff', label:'Shots off Target',icon:'↗️'},
-    {key:'shotsBlk', label:'Shots Blocked',   icon:'🛡️'},
-    {key:'tacklesW', label:'Tackles Won',     icon:'💪'},
-    {key:'clearancesG',label:'Clearances',   icon:'👟'},
-    {key:'corners',  label:'Corners',         icon:'🚩'},
-    {key:'yellows',  label:'Yellow Cards',    icon:'🟡'},
-    {key:'reds',     label:'Red Cards',       icon:'🔴'},
+    {key:'goals',      label:'Goals',           icon:'⚽'},
+    {key:'assists',    label:'Assists',          icon:'🅰️'},
+    {key:'saves',      label:'GK Saves',         icon:'🧤'},
+    {key:'shotsOn',    label:'Shots on Target',  icon:'🎯'},
+    {key:'shotsOff',   label:'Shots off Target', icon:'↗️'},
+    {key:'shotsBlk',   label:'Shots Blocked',    icon:'🛡️'},
+    {key:'tacklesW',   label:'Tackles Won',      icon:'💪'},
+    {key:'clearancesG',label:'Clearances',       icon:'👟'},
+    {key:'corners',    label:'Corners',           icon:'🚩'},
+    {key:'yellows',    label:'Yellow Cards',      icon:'🟡'},
+    {key:'reds',       label:'Red Cards',         icon:'🔴'},
   ];
 
-  const rows = (m.players||[]).map((p,pi)=>{
-    const s = p.stats||{};
-    const statInputs = STATS.map(st=>`
-      <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
-        <span style="font-size:14px;">${st.icon}</span>
-        <input type="number" min="0" max="99"
-          id="es-${pi}-${st.key}"
-          value="${s[st.key]||0}"
-          style="width:46px;text-align:center;padding:6px 4px;font-size:13px;font-weight:700;">
-        <span style="font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:center;max-width:46px;line-height:1.2;">${st.label}</span>
-      </div>`).join('');
+  // Stat input builder
+  const makeStatInputs = (prefix, statsObj) => STATS.map(st=>`
+    <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+      <span style="font-size:14px;">${st.icon}</span>
+      <input type="number" min="0" max="99"
+        id="${prefix}-${st.key}"
+        value="${statsObj[st.key]||0}"
+        style="width:46px;text-align:center;padding:6px 4px;font-size:13px;font-weight:700;">
+      <span style="font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:center;max-width:46px;line-height:1.2;">${st.label}</span>
+    </div>`).join('');
+
+  // Thackley player rows
+  const playerRows = (m.players||[]).map((p,pi)=>{
     return`<div style="background:#f8f8f8;border-radius:10px;padding:14px;margin-bottom:10px;">
-      <div style="font-weight:700;font-size:13px;margin-bottom:12px;color:var(--text);">
+      <div style="font-weight:700;font-size:13px;margin-bottom:12px;">
         <span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--red);margin-right:6px;">#${p.number}</span>
         ${p.firstName} ${p.lastName}
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;">${statInputs}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">${makeStatInputs('es-'+pi, p.stats||{})}</div>
     </div>`;
   }).join('');
 
-  document.getElementById('edit-stats-body').innerHTML = rows ||
-    '<div style="color:var(--muted);text-align:center;padding:20px;">No players in this match</div>';
+  // Opposition section — score + key stats
+  const opp = m.match?.opp || 'Opposition';
+  const oppStats = m.oppStats || {};
+  const oppSection = `
+    <div style="background:linear-gradient(135deg,#f0f0f0,#e8e8e8);border-radius:12px;padding:16px;margin-bottom:10px;">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:15px;letter-spacing:1px;color:#555;margin-bottom:14px;">
+        ${opp} — Opposition Stats
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="margin-top:0;">Final Score — Goals Conceded by Thackley</label>
+        <input type="number" min="0" max="99" id="opp-score"
+          value="${m.score?.away||0}"
+          style="width:80px;font-size:20px;font-weight:700;text-align:center;font-family:'Bebas Neue',sans-serif;color:var(--red);">
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${[
+          {key:'shots',   label:'Total Shots',    icon:'🎯'},
+          {key:'shotsOn', label:'Shots on Target', icon:'🎯'},
+          {key:'corners', label:'Corners',          icon:'🚩'},
+          {key:'yellows', label:'Yellow Cards',     icon:'🟡'},
+          {key:'reds',    label:'Red Cards',        icon:'🔴'},
+        ].map(st=>`
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <span style="font-size:14px;">${st.icon}</span>
+            <input type="number" min="0" max="99"
+              id="opp-${st.key}"
+              value="${oppStats[st.key]||0}"
+              style="width:46px;text-align:center;padding:6px 4px;font-size:13px;font-weight:700;">
+            <span style="font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:center;max-width:46px;line-height:1.2;">${st.label}</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+
+  document.getElementById('edit-stats-body').innerHTML =
+    // Section header
+    `<div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:var(--red);margin-bottom:10px;">Thackley Players</div>` +
+    (playerRows || '<div style="color:var(--muted);text-align:center;padding:12px;">No players recorded</div>') +
+    `<div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:#555;margin:16px 0 10px;">Opposition</div>` +
+    oppSection;
 
   closeM('mo-report');
   document.getElementById('mo-edit-stats').classList.add('open');
@@ -2691,8 +2763,9 @@ async function saveEditedStats(){
 
   const STAT_KEYS = ['goals','assists','saves','shotsOn','shotsOff','shotsBlk',
                      'tacklesW','clearancesG','corners','yellows','reds'];
+  const OPP_KEYS = ['shots','shotsOn','corners','yellows','reds'];
 
-  // Update player stats from inputs
+  // Update Thackley player stats
   (m.players||[]).forEach((p,pi)=>{
     const s = p.stats||{};
     STAT_KEYS.forEach(key=>{
@@ -2702,14 +2775,27 @@ async function saveEditedStats(){
     p.stats = s;
   });
 
+  // Update opposition score and stats
+  const oppScoreInp = document.getElementById('opp-score');
+  if(oppScoreInp && m.score) m.score.away = parseInt(oppScoreInp.value)||0;
+  m.oppStats = m.oppStats||{};
+  OPP_KEYS.forEach(key=>{
+    const inp = document.getElementById('opp-'+key);
+    if(inp) m.oppStats[key] = parseInt(inp.value)||0;
+  });
+
+  // Recalculate home score from player goals
+  const totalGoals = (m.players||[]).reduce((sum,p)=>sum+(p.stats?.goals||0),0);
+  if(m.score) m.score.home = totalGoals;
+
   // Save back to Firebase
   try{
     await window._db.set('matches', _editMatchId, m);
     const idx = _cachedMatches.findIndex(x=>x.id===_editMatchId);
     if(idx>=0) _cachedMatches[idx] = m;
     closeM('mo-edit-stats');
-    showReport(_editMatchId); // Reopen with updated stats
-    showToast('Stats updated!');
+    showReport(_editMatchId);
+    showToast('Stats saved!');
   }catch(e){
     showToast('Error saving: '+e.message,'warn');
   }
