@@ -1629,7 +1629,10 @@ function submitEvent(){
   if(curType==='goal') G.score.home++;
   if(curType==='conceded'||curType==='goal-ag') G.score.away++;
   updStat(player,curType,curOutcome);
-  if(curType==='goal'&&assist) updStat(assist,'assist','');
+  if(curType==='goal'){
+    updStat(player,'shot-on',''); // all goals count as shots on target
+    if(assist) updStat(assist,'assist','');
+  }
   updScoreDisp(); renderELog(); updLiveStrip(); checkHandicap(); closeM('mo-event');
 }
 
@@ -2332,6 +2335,7 @@ function showReport(id){
       </div>
       ${statBar('Total Shots', totShots, Math.max(totShots,15))}
       ${statBar('Shot Accuracy %', shotAcc, 100, shotAcc>=50?'#1a7a1a':'var(--red)')}
+      <!-- note: shots on target includes goals -->
       ${statBar('Goals', totGoals, Math.max(totGoals,6), 'var(--red)')}
       ${totGoalsAg?statBar('Goals Conceded', totGoalsAg, Math.max(totGoalsAg,6), '#880000'):''}
       ${oppStats.shotsOn?statBar('Opp Shots on Target', oppStats.shotsOn, Math.max(oppStats.shotsOn,10), '#555'):''}
@@ -2463,7 +2467,7 @@ function submitPenalty(){
   const opp=G.match.opp||'Opponent';
   let desc='',icon='P';
   if(isThackley){
-    if(_penResult==='goal'){desc='Penalty GOAL! Scored by '+player;icon='[PG]';G.score.home++;updStat(player,'penGoal','');}
+    if(_penResult==='goal'){desc='Penalty GOAL! Scored by '+player;icon='[PG]';G.score.home++;updStat(player,'penGoal','');updStat(player,'shot-on','');}
     else{const mt=_penMissDetail==='saved'?'Saved':'Missed Target';desc='Penalty missed by '+player+' - '+mt;icon='[PM]';updStat(player,'penMiss',_penMissDetail);}
     updStat(player,'penWon','');
   } else {
@@ -2929,6 +2933,7 @@ function submitFreeKick(){
         icon='⚽';
         G.score.home++;
         updStat(_fkTaker,'goal','');
+        updStat(_fkTaker,'shot-on',''); // free kick goals count as shot on target
         if(assist) updStat(assist,'assist','');
         updScoreDisp();
       }
@@ -3076,6 +3081,7 @@ function submitCorner(){
   if(isGoal){
     G.score.home++;
     updStat(scorer,'goal','');
+    updStat(scorer,'shot-on',''); // corner goals count as shot on target
     if(taker) updStat(taker,'assist','');
     updScoreDisp();
   }
@@ -3302,9 +3308,10 @@ function submitShotOn(){
   const assist=_sotOutcome==='goal'?document.getElementById('sot-assist').value:'';
 
   if(_sotOutcome==='goal'){
-    // Log as a goal
+    // Log as a goal — also counts as a shot on target
     G.score.home++;
     updStat(_sotPlayer,'goal','');
+    updStat(_sotPlayer,'shot-on',''); // goals always count as shots on target
     if(assist) updStat(assist,'assist','');
     const desc='Goal! '+_sotPlayer+(assist?' (assist: '+assist+')':'');
     pushEv({type:'goal',subtype:'',time:getTS(),sec:G.timer.sec,quarter:G.quarter,
@@ -3506,7 +3513,8 @@ async function generateMatchReport(){
   let shotsOn=0,shotsOff=0,shotsBlk=0,tackles=0,clearances=0,corners=0,saves=0;
   (m.players||[]).forEach(p=>{
     const s=p.stats||{};
-    shotsOn+=(s.shotsOn||0); shotsOff+=(s.shotsOff||0); shotsBlk+=(s.shotsBlk||0);
+    shotsOn+=(s.shotsOn||0); // shotsOn already includes goals (each goal also increments shotsOn)
+    shotsOff+=(s.shotsOff||0); shotsBlk+=(s.shotsBlk||0);
     tackles+=(s.tacklesW||0); clearances+=(s.clearancesG||0);
     corners+=(s.corners||0); saves+=(s.saves||0);
   });
