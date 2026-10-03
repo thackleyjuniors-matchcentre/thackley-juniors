@@ -482,13 +482,13 @@ textarea{resize:vertical;min-height:80px;}
       <div class="live-section">
         <div class="live-section-title set">&#128681; Set Pieces</div>
         <div class="live-btns cols-3">
-          <button class="lbtn set" onclick="openEModal('corner')">
+          <button class="lbtn set" onclick="openTeamPicker('corner')">
             <span class="lbtn-ico">&#128681;</span>Corner
           </button>
-          <button class="lbtn set" onclick="openPenaltyModal()">
+          <button class="lbtn set" onclick="openTeamPicker('penalty')">
             <span class="lbtn-ico">&#127919;</span>Penalty
           </button>
-          <button class="lbtn set" onclick="openFreeKickModal()">
+          <button class="lbtn set" onclick="openTeamPicker('freekick')">
             <span class="lbtn-ico">&#129354;</span>Free Kick
           </button>
         </div>
@@ -1739,7 +1739,10 @@ function recalc(){
 function updLiveStrip(){
   const ev=G.events;
   document.getElementById('ls-g').textContent=G.score.home;
-  document.getElementById('ls-sv').textContent=ev.filter(e=>e.type==='save').length;
+  // Count saves: direct save events + opp shots that were saved
+  const saveCount = ev.filter(e=>e.type==='save').length +
+    ev.filter(e=>(e.type==='opp-shot-on'||e.type==='opp-freekick'||e.type==='opp-penalty')&&e.subtype==='saved').length;
+  document.getElementById('ls-sv').textContent=saveCount;
   document.getElementById('ls-sh').textContent=ev.filter(e=>['goal','shot-on','shot-off','shot-blk'].includes(e.type)).length;
   document.getElementById('ls-tk').textContent=ev.filter(e=>e.type==='tackle').length;
   document.getElementById('ls-cn').textContent=ev.filter(e=>e.type==='corner').length;
@@ -3518,14 +3521,35 @@ Write the report now:`;
     document.getElementById('parent-report-loading').style.display = 'none';
     document.getElementById('parent-report-body').textContent = reportText;
   } catch(e){
-    // Fallback: show the match data so you can manually request a report
     document.getElementById('parent-report-loading').style.display = 'none';
-    document.getElementById('parent-report-body').textContent =
-      'Could not auto-generate — paste the details below into Claude.ai to create the report:\n\n'+
-      '---\n'+matchSummary+'\n---\n\n'+
-      'Ask Claude: "Write a 2-3 paragraph parent match report for a grassroots youth football club '+
-      'in a warm, encouraging journalist tone based on these stats. '+
-      (result==='win'?'Thackley won so be celebratory.':result==='loss'?'Thackley lost so focus on the positives.':'It was a draw so be balanced.')+'"';
+
+    // Build a clean prompt to send to Claude.ai
+    const tone = result==='win'
+      ? 'Thackley won — be celebratory and highlight the scorers and performance.'
+      : result==='loss'
+      ? 'Thackley lost — focus on the positives: chances created, goals scored, good moments. Stay encouraging and do not dwell on the defeat.'
+      : 'It was a draw — give a balanced summary highlighting the strongest aspects of Thackley performance.';
+
+    const fullPrompt = 'Write a 2-3 short paragraph match report for Thackley Juniors FC, a grassroots youth football club. '
+      + 'This will be shared with parents on WhatsApp. Use a warm, encouraging, journalist-style tone. '
+      + 'Base it ONLY on the statistics below — do not invent anything. '
+      + tone + '\n\n' + matchSummary;
+
+    // Show the prompt with a button to open Claude.ai
+    document.getElementById('parent-report-body').innerHTML =
+      '<div style="margin-bottom:12px;font-size:12px;color:var(--muted);">Tap the button below to generate in Claude.ai, then copy the result back here.</div>'
+      + '<button class="btn btn-red" style="width:100%;justify-content:center;margin-bottom:14px;" onclick="openInClaude()">'
+      + '&#9997;&#65039; Generate in Claude.ai</button>'
+      + '<details style="font-size:11px;color:var(--muted);">'
+      + '<summary style="cursor:pointer;margin-bottom:8px;">Or copy prompt manually</summary>'
+      + '<textarea id="prompt-ta" readonly style="width:100%;height:180px;font-size:11px;padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,.1);background:#f8f8f8;resize:none;">'
+      + fullPrompt.replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      + '</textarea>'
+      + '<button class="btn btn-ghost btn-sm" style="margin-top:6px;width:100%;justify-content:center;" onclick="copyPrompt()">&#128203; Copy Prompt</button>'
+      + '</details>';
+
+    // Store prompt for the open button
+    window._pendingClaudePrompt = fullPrompt;
   }
 }
 
@@ -3544,6 +3568,21 @@ function copyParentReport(){
     document.body.removeChild(ta);
     showToast('Copied to clipboard!');
   });
+}
+
+
+function openInClaude(){
+  if(!window._pendingClaudePrompt) return;
+  const encoded = encodeURIComponent(window._pendingClaudePrompt);
+  window.open('https://claude.ai/new?q='+encoded, '_blank');
+}
+
+function copyPrompt(){
+  const ta = document.getElementById('prompt-ta');
+  if(!ta) return;
+  navigator.clipboard.writeText(window._pendingClaudePrompt||ta.value)
+    .then(()=>showToast('Prompt copied!'))
+    .catch(()=>{ ta.select(); document.execCommand('copy'); showToast('Prompt copied!'); });
 }
 
 // ═══ SEASON MANAGEMENT ═══
