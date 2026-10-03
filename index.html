@@ -696,6 +696,17 @@ textarea{resize:vertical;min-height:80px;}
     <div class="modal-title">📊 Match Report</div>
     <div id="report-body"></div>
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(0,0,0,.07);">
+      <!-- POTM & NOTES -->
+      <div style="background:#f7f7f9;border-radius:12px;padding:16px;margin-bottom:14px;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1.5px;color:#a07800;margin-bottom:14px;">&#127942; Player of the Match &amp; Notes</div>
+        <label style="margin-top:0;">Parents' Player of the Match</label>
+        <select id="rep-potm" style="margin-bottom:4px;"><option value="">Select player...</option></select>
+        <p style="font-size:10px;color:var(--muted);margin-bottom:14px;">Chosen by the parents — can be added or updated at any time.</p>
+        <label>Additional Match Notes</label>
+        <textarea id="rep-notes" rows="4" placeholder="e.g. Brilliant long-range strike from Leo in Q2. Outstanding team move for the third — five players involved. Archie made a crucial last-ditch tackle at 2-1..." style="font-size:13px;line-height:1.6;"></textarea>
+        <p style="font-size:10px;color:var(--muted);margin-top:6px;margin-bottom:12px;">These will be woven naturally into the generated report.</p>
+        <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;" onclick="saveReportDetails()">&#128190; Save POTM &amp; Notes</button>
+      </div>
       <button class="btn btn-red" style="width:100%;justify-content:center;gap:8px;" onclick="generateMatchReport()">
         &#9997;&#65039; Generate Parent Report
       </button>
@@ -1889,7 +1900,7 @@ function renderProfiles(search){
           <div class="pccs"><div class="pccsv">${cs.assists}</div><div class="pccsl">Assists</div></div>
           <div class="pccs"><div class="pccsv">${cs.saves}</div><div class="pccsl">Saves</div></div>
         </div>
-        <div class="pcm"><span>${cs.apps} match${cs.apps!==1?'es':''}</span><span>${p.dob?calcAge(p.dob)+' yrs':''}</span></div>
+        <div class="pcm"><span>${cs.apps} match${cs.apps!==1?'es':''}</span>${cs.potmCount?`<span style="color:#a07800;">&#127942; ${cs.potmCount}x POTM</span>`:''}<span>${p.dob?calcAge(p.dob)+' yrs':''}</span></div>
       </div></div>`;
   }).join('');
 }
@@ -1898,17 +1909,21 @@ function careerStats(profile,matches,season){
   const name=fname(profile);
   const filtered=season?(matches||[]).filter(m=>(m.season||'2025/26')===season):(matches||[]);
   let apps=0,goals=0,assists=0,saves=0,captainCount=0;
+  let potmCount=0;
   filtered.forEach(m=>{
-    const app=m.events?.some(e=>e.playerName===name||(e.type==='goal'&&e.extra?.assist===name));
-    if(app)apps++;
+    const pl=(m.players||[]).find(x=>fname(x)===name);
+    if(!pl) return;
+    const played=pl.posQ&&pl.posQ.some(pos=>pos!=='SUB');
+    if(!played) return;
+    apps++;
     if(m.match?.captain===name) captainCount++;
-    m.events?.forEach(e=>{
-      if(e.playerName===name){if(e.type==='goal')goals++;if(e.type==='save')saves++;}
-      // Only count assist if it's on a goal event and assist field is not empty
-      if((e.type==='goal'||e.type==='corner')&&e.extra?.assist&&e.extra.assist===name)assists++;
-    });
+    if(m.potm===name||m.match?.potm===name) potmCount++;
+    const s=pl.stats||{};
+    goals   += s.goals||0;
+    assists += s.assists||0;
+    saves   += s.saves||0;
   });
-  return{apps,goals,assists,saves,captainCount};
+  return{apps,goals,assists,saves,captainCount,potmCount};
 }
 
 function suggestPos(profile,matches){
@@ -1960,7 +1975,7 @@ async function openPlayerStats(id){
 
   // ── Season totals ─────────────────────────────────────────────────────
   let apps=0,goals=0,assists=0,saves=0,shotsOn=0,shotsOff=0;
-  let tackles=0,clearances=0,corners=0,yellows=0,reds=0;
+  let tackles=0,clearances=0,corners=0,yellows=0,reds=0,potmCount=0;
   const matchBreakdown = [];
   const seasonRatings = [];
 
@@ -2077,6 +2092,7 @@ async function openPlayerStats(id){
       ${tile('🚩', corners,  'Corners','#c05800')}
       ${yellows||reds ? tile('🟡', yellows,'Yellows','#a07800') : ''}
       ${yellows||reds ? tile('🔴', reds,   'Reds','#aa0000') : ''}
+      ${potmCount ? tile('&#127942;', potmCount, 'POTM','#a07800') : ''}
     </div>
 
     <!-- MATCH BY MATCH -->
@@ -2141,7 +2157,7 @@ async function saveMatch(){
   // Reuse existing ID if already auto-saved, so we update rather than duplicate
   const matchId=G._savedMatchId||('match_'+Date.now());
   G._savedMatchId=matchId;
-  const matchData={id:matchId,label,season:_activeSeason||CURRENT_SEASON,possession:G.poss?getPossessionPcts():null,match:{...G.match},
+  const matchData={id:matchId,label,season:_activeSeason||CURRENT_SEASON,possession:G.poss?getPossessionPcts():null,potm:G.match.potm||null,matchNotes:G.match.matchNotes||'',match:{...G.match},
     players:G.players.map(p=>({...p,stats:{...p.stats||{}},posQ:[...p.posQ]})),
     events:[...G.events],score:{...G.score},shootout:G.shootout||null,savedAt:new Date().toISOString()};
   try{
@@ -2261,6 +2277,21 @@ function showReport(id){
       <div style="font-size:10px;color:rgba(255,255,255,0.55);margin-top:8px;">${m.match?.gtype||''} ${m.match?.venue?'· '+m.match.venue:''}</div>
     </div>
 
+    <!-- PLAYER OF THE MATCH -->
+    ${m.potm?`<div style="background:linear-gradient(135deg,#a07800,#c89a00);border-radius:12px;padding:16px;margin-bottom:14px;display:flex;align-items:center;gap:14px;">
+      <div style="font-size:36px;">&#127942;</div>
+      <div>
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:rgba(255,255,255,0.7);text-transform:uppercase;margin-bottom:3px;">Parents' Player of the Match</div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:#fff;letter-spacing:1px;">${m.potm}</div>
+      </div>
+    </div>`:''}
+
+    <!-- MATCH NOTES -->
+    ${m.matchNotes?`<div style="background:#fff;border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:var(--shadow-sm);border-left:4px solid var(--gold);">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:12px;letter-spacing:1.5px;color:#a07800;margin-bottom:8px;">Coach Notes</div>
+      <div style="font-size:13px;color:var(--text);line-height:1.6;white-space:pre-wrap;">${m.matchNotes}</div>
+    </div>`:''}
+
     <!-- GOALS & ASSISTS SUMMARY -->
     ${(()=>{
       // Pull all goal events from timeline
@@ -2340,6 +2371,17 @@ function showReport(id){
     </div>`;
 
   _editMatchId = id;
+  // Populate POTM dropdown from match players
+  const _repPotm = document.getElementById('rep-potm');
+  if(_repPotm){
+    _repPotm.innerHTML = '<option value="">Select player...</option>' +
+      (m.players||[]).filter(p=>p.posQ&&p.posQ.some(pos=>pos!=='SUB'))
+        .map(p=>`<option value="${fname(p)}">#${p.number} ${fname(p)}</option>`).join('');
+    if(m.potm||m.match?.potm) _repPotm.value = m.potm||m.match?.potm;
+  }
+  // Populate notes
+  const _repNotes = document.getElementById('rep-notes');
+  if(_repNotes) _repNotes.value = m.matchNotes||'';
   document.getElementById('rep-del').onclick=async()=>{
     if(!confirm('Delete this match?'))return;
     try{await window._db.del('matches',String(id));_cachedMatches=_cachedMatches.filter(x=>x.id!==id);closeM('mo-report');renderSaved();showToast('Match deleted');}
@@ -3415,6 +3457,25 @@ async function saveEditedStats(){
 }
 
 // ═══ PARENT MATCH REPORT GENERATOR ═══
+async function saveReportDetails(){
+  const m = getSaved().find(x=>x.id===_editMatchId);
+  if(!m){ showToast('No match loaded','warn'); return; }
+  const potm = document.getElementById('rep-potm')?.value||'';
+  const notes = document.getElementById('rep-notes')?.value.trim()||'';
+  m.potm = potm;
+  m.matchNotes = notes;
+  // Also keep on m.match for legacy support
+  if(m.match){ m.match.potm = potm; m.match.matchNotes = notes; }
+  try{
+    await window._db.set('matches', _editMatchId, m);
+    const idx = _cachedMatches.findIndex(x=>x.id===_editMatchId);
+    if(idx>=0) _cachedMatches[idx] = m;
+    showToast('Saved!');
+    // Refresh report to show updated POTM banner
+    showReport(_editMatchId);
+  }catch(e){ showToast('Error saving: '+e.message,'warn'); }
+}
+
 async function generateMatchReport(){
   const m = getSaved().find(x=>x.id===_editMatchId);
   if(!m){ showToast('No match loaded','warn'); return; }
@@ -3460,11 +3521,66 @@ async function generateMatchReport(){
   let yellows=0, reds=0;
   (m.players||[]).forEach(p=>{yellows+=(p.stats?.yellows||0);reds+=(p.stats?.reds||0);});
 
+  // POTM and match notes — read from the live fields first (in case unsaved), then from record
+  const potm = document.getElementById('rep-potm')?.value || m.potm || m.match?.potm || null;
+  const matchNotes = document.getElementById('rep-notes')?.value?.trim() || m.matchNotes || '';
+
   // Key moments from timeline (goals, saves, subs)
   const keyEvents = (m.events||[])
     .filter(e=>['goal','opp-shot-on'].includes(e.type)||(e.type==='opp-penalty'&&e.subtype==='goal')||(e.type==='opp-freekick'&&e.subtype==='goal'))
     .map(e=>`Q${e.quarter} ${e.time}: ${e.desc}`)
     .join('; ');
+
+  // ── Season context for each scorer ──────────────────────────────────────
+  // Get all season matches EXCLUDING this one to get pre-match totals
+  const seasonMatchesBefore = getMatchesForSeason(_activeSeason)
+    .filter(sm => sm.id !== m.id);
+
+  // Build season totals per player (goals + assists) before this match
+  const seasonTotals = {};
+  seasonMatchesBefore.forEach(sm=>{
+    (sm.players||[]).forEach(p=>{
+      const n = fname(p);
+      const s = p.stats||{};
+      if(!seasonTotals[n]) seasonTotals[n]={goals:0,assists:0,saves:0};
+      seasonTotals[n].goals   += s.goals||0;
+      seasonTotals[n].assists += s.assists||0;
+      seasonTotals[n].saves   += s.saves||0;
+    });
+  });
+
+  // Build scorer context lines e.g. "Leo Ward (2 goals — his first of the season)"
+  const scorerContext = goalEvents.map(e=>{
+    const scorer = e.playerName;
+    const assist = e.extra?.assist;
+    const prevGoals = seasonTotals[scorer]?.goals||0;
+    const thisMatchGoals = goalEvents.filter(g=>g.playerName===scorer).length;
+    const newTotal = prevGoals + thisMatchGoals;
+    let ctx = '';
+    if(prevGoals===0 && thisMatchGoals===1) ctx = scorer+" (first goal of the season — hopefully the first of many!)";
+    else if(prevGoals===0 && thisMatchGoals===2) ctx = scorer+" (first two goals of the season)";
+    else if(prevGoals===0 && thisMatchGoals>=3) ctx = scorer+" (first "+thisMatchGoals+" goals of the season — hat-trick!)";
+    else if(thisMatchGoals>=3) ctx = scorer+" (hat-trick — "+newTotal+" for the season now)";
+    else if(thisMatchGoals===2) ctx = scorer+" (brace — "+newTotal+" for the season)";
+    else ctx = scorer+" ("+newTotal+" goal"+(newTotal!==1?'s':'')+" for the season)";
+    if(assist){
+      const prevAssists = seasonTotals[assist]?.assists||0;
+      const thisMatchAssists = goalEvents.filter(g=>g.extra?.assist===assist).length;
+      const newAssTotal = prevAssists + thisMatchAssists;
+      ctx += ", assisted by "+assist+(prevAssists===0?" (first assist of the season)":" ("+newAssTotal+" assist"+(newAssTotal!==1?'s':'')+" this season)");
+    }
+    return ctx;
+  });
+
+  // GK context
+  const gkName = (m.players||[]).find(p=>p.posQ&&p.posQ.some(pos=>pos==='GK'))
+    ? fname((m.players||[]).find(p=>p.posQ&&p.posQ.some(pos=>pos==='GK'))) : null;
+  const gkSaves = gkName ? ((m.players||[]).find(p=>fname(p)===gkName)?.stats?.saves||0) : 0;
+  const gkPrevSaves = gkName ? (seasonTotals[gkName]?.saves||0) : 0;
+  const gkSeasonTotal = gkPrevSaves + gkSaves;
+  const gkContext = gkName && gkSaves > 0
+    ? gkName+' made '+gkSaves+' save'+(gkSaves!==1?'s':'')+' ('+gkSeasonTotal+' for the season)'
+    : null;
 
   // Build structured prompt
   const matchSummary = `
@@ -3476,12 +3592,12 @@ Competition: ${comp}
 Venue: ${venue}
 
 THACKLEY STATS:
-- Goals: ${h} ${scorers.length?'('+scorers.join(', ')+')':''}
+- Goals: ${h} ${scorerContext.length?'\n  '+scorerContext.join('\n  '):''}
 - Total shots: ${totalShots} (${shotsOn} on target, ${shotsOff} off target, ${shotsBlk} blocked)
 - Corners won: ${corners}
 - Tackles won: ${tackles}
 - Clearances: ${clearances}
-- GK saves: ${saves}
+- GK saves: ${saves}${gkContext?' ('+gkContext+')':''}
 ${poss?'- Possession: Thackley '+poss.home+'% vs '+opp+' '+poss.away+'%':''}
 ${yellows||reds?'- Disciplinary: '+yellows+' yellow'+(yellows!==1?'s':'')+(reds?' '+reds+' red'+(reds!==1?'s':''):''):''}
 
@@ -3491,6 +3607,8 @@ OPPOSITION STATS:
 - Corners: ${oppCorners}
 
 KEY MOMENTS: ${keyEvents||'No specific events recorded'}
+${potm?'PARENTS PLAYER OF THE MATCH: '+potm:''}
+${matchNotes?'COACH NOTES (incorporate naturally into the report): '+matchNotes:''}
 `.trim();
 
   const prompt = `You are writing a short match report for Thackley Juniors FC, a grassroots youth football club. This report will be shared with parents via WhatsApp.
@@ -3499,10 +3617,15 @@ Write 2-3 short paragraphs in a warm, encouraging, journalist-style tone. Base i
 
 Perspective: Always written from Thackley's point of view.
 - If Thackley won: be positive and celebratory, highlight standout stats and scorers
+- Use the scorer context to add personality — mention if it's a player's first goal, a brace, a hat-trick, or a milestone
+- Reference season totals naturally e.g. "Leo's brace takes him to 8 for the season" or "Oscar opened his account for the campaign"
+- Only mention season context if it adds something interesting — don't force it for every player
 - If Thackley drew: balanced, highlight the strongest aspects of Thackley's performance  
 - If Thackley lost: focus on positives from the stats (chances created, possession, goals scored, defensive work), don't dwell on the defeat, stay encouraging
 
 Keep it concise — parents read this on their phones. No bullet points, just flowing paragraphs. End with an encouraging line for the players.
+- If a Parents' Player of the Match is named, mention them prominently and warmly
+- If Coach Notes are provided, weave them naturally into the narrative — they add colour and context the stats alone can't capture
 
 MATCH DATA:
 ${matchSummary}
@@ -3677,6 +3800,8 @@ async function autoSaveMatch(){
     const matchData={
       id:matchId,
       label:G.match.opp+' (Auto-saved)',
+      potm:G.match.potm||null,
+      matchNotes:G.match.matchNotes||'',
       season:_activeSeason||CURRENT_SEASON,
       possession:G.poss?getPossessionPcts():null,
       match:{...G.match},
